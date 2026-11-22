@@ -269,7 +269,7 @@ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
 name = "forager-addr"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "blake2b_simd",
  "num-bigint",
@@ -279,7 +279,7 @@ dependencies = [
 
 [[package]]
 name = "forager-wallet"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "bip32",
  "blake2b_simd",
