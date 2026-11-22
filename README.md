@@ -55,7 +55,9 @@ evidence, so each release artifact carries three things:
 
 ```sh
 # 1. This archive was built by this repository's release workflow, from a commit in this repository.
-gh attestation verify forager-wallet-<version>-<target>.tar.gz --repo yuzi-co/forager-wallet
+gh attestation verify forager-wallet-<version>-<target>.tar.gz --repo foragerminer/forager-wallet
+# Releases up to v0.5.0 were built before the move to foragerminer (2026-11-22).
+# Verify those with --repo yuzi-co/forager-wallet.
 
 # 2. The archive is the one that was signed.
 sha256sum -c forager-wallet-<version>-<target>.tar.gz.sha256

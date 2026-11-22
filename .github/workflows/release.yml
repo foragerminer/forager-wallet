@@ -13,7 +13,7 @@ name: release
 #      artifact's SHA-256 to this repository, this workflow file, this commit and this run. It is
 #      signed through Sigstore against a short-lived GitHub OIDC identity, so verification does not
 #      depend on a long-lived key anyone here holds. `gh attestation verify <file> --repo
-#      yuzi-co/forager-wallet` fails if the file was not produced by this workflow from this repo.
+#      foragerminer/forager-wallet` fails if the file was not produced by this workflow from this repo.
 #
 #   2. An embedded dependency SBOM. `cargo auditable` compresses the exact resolved dependency
 #      list into a `.dep-v0` linker section of the binary itself, so `cargo audit bin
@@ -100,7 +100,7 @@ jobs:
 
           ```sh
           # 1. This archive was built by this repository's release workflow, from this commit.
-          gh attestation verify forager-wallet-<version>-<target>.tar.gz --repo yuzi-co/forager-wallet
+          gh attestation verify forager-wallet-<version>-<target>.tar.gz --repo foragerminer/forager-wallet
 
           # 2. The archive is intact.
           sha256sum -c forager-wallet-<version>-<target>.tar.gz.sha256
