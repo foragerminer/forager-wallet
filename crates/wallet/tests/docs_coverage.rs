@@ -140,7 +140,14 @@ fn coin_table_rows(md: &str) -> Vec<Row> {
 }
 
 /// Mint `ticker`'s mainnet address from `secret`, or fail naming the row that could not be minted.
+///
+/// A Tari secret is the 16-byte entropy of its seed, not a 32-byte key, so a Tari row mints from
+/// the low 16 bytes (the last 32 hex characters) of `secret`. Key 1 stays entropy 1.
 fn mint(ticker: &str, secret: &str) -> String {
+    let secret = match coins::lookup(ticker) {
+        Some(s) if s.family() == Family::Tari => &secret[secret.len() - 32..],
+        _ => secret,
+    };
     address_from_secret(ticker, secret, Network::Mainnet)
         .unwrap_or_else(|e| panic!("COINS.md documents `{ticker}`, which does not mint: {e}"))
         .address
@@ -350,6 +357,10 @@ fn leading_characters(spec: &coins::CoinSpec) -> Leading {
         coins::FamilyParams::Xelis => {
             Leading::Forced(format!("{}{}", coins::XELIS_HRP, coins::XELIS_SEPARATOR))
         }
+        // `base58(0x00) ‖ base58(0x01) ‖ base58(keys ‖ checksum)`: the network and features bytes
+        // are encoded on their own, one character each (`forager_addr::codec::tari::encode`), so
+        // the mainnet network `1` and the one-sided features `2` open every address.
+        coins::FamilyParams::Tari => Leading::Forced("12".to_string()),
         // `base58check([0x01, 0x00] ‖ 02|03 ‖ key)`: the version bytes and the `02`/`03` lead fix
         // the top bytes, so the first two characters are always `es` (the fixed-fill brackets run
         // `esWJ`..`esaC`; epic-wallet documents mainnet as `es`).

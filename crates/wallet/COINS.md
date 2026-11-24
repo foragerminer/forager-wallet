@@ -28,6 +28,7 @@ Run `forager-wallet list` for the live table — this file documents it, and a t
 | Quantus | SS58 (prefix 189) of Poseidon2(ML-DSA-87 public key) | ML-DSA-87 (FIPS 204) |
 | Nockchain | base58 of the Tip5 digest of the master public key (v1 payee hash), no version byte, **no checksum** | Cheetah over Fp^6 (Goldilocks) |
 | Xelis | bech32 (classic checksum, not bech32m) with a `:` separator: `xel:` + (compressed `s^-1 * H` ‖ type `0x00`) | Ristretto255 |
+| Tari | base58(network) ‖ base58(features) ‖ base58(view key ‖ spend key ‖ DammSum), keys from a 24-word CipherSeed | Ristretto255 |
 
 ## The coin table
 
@@ -115,6 +116,7 @@ may carry exactly one of two markers, and a marker is the only way a row can cla
 | `quan` | Quantus | Quantus | `qz…` | — |
 | `nock` | Nockchain | Nockchain | no fixed prefix | — |
 | `xel` | Xelis | Xelis | `xel:…` | — |
+| `xtm` | Tari | Tari | `12…` | — |
 
 These rows need a word of explanation:
 
@@ -195,6 +197,27 @@ These rows need a word of explanation:
   `bech32.rs`, `elgamal/key.rs`, `proofs/mod.rs` and `xelis_common/src/config.rs`. The known-answer
   vectors (four keys, both networks) were produced by running that code. **Not checked:** a restore
   in the official wallet and a pool payout.
+- **`xtm`** — Tari. The secret is a 24-word Tari **CipherSeed**, which is not BIP39 although it
+  uses the same 2048 English words: the words carry 33 enciphered bytes (version 2, a birthday,
+  16 bytes of entropy, a MAC, a salt and a CRC-32), sealed with Argon2d and ChaCha20 under Tari's
+  default passphrase. Only the entropy reaches the keys: the view and spend private keys are
+  Blake2b-512 domain-separated hashes of it (branches `data encryption` and `comms`), reduced
+  modulo the Ristretto255 group order. The address is the mainnet dual address: network byte
+  `0x00`, features `0x01` (one-sided, the form a coinbase pays), both public keys and a one-byte
+  DammSum, written as the base58 of the first byte, then of the second, then of the rest. It opens
+  `12` and is 91 characters for almost every key. A Tari wallet may show the default form, features
+  `0x03`, which opens `14`: same keys, same funds. `new` also prints the entropy as 32 hex
+  characters; `restore <entropy-hex> --coin xtm` re-derives the address from it, but no Tari wallet
+  imports it, so back up the words. `restore --mnemonic "<24 words>" --coin xtm` deciphers the words
+  (it checks the CRC and the MAC, and runs Argon2 over 46 MiB once). A seed protected by a user
+  passphrase (CipherSeed version 3) is refused. Mainnet only; `new --hd` does not apply. In the
+  table the key `0000…0001` stands for the entropy `0000…0001` (its low 16 bytes). Source:
+  `tari-project/tari@ae2296bc` (BSD-3-Clause), `base_layer/common_types/src/seeds/cipher_seed.rs`,
+  `seeds/mnemonic.rs`, `tari_address/dual_address.rs`, `dammsum.rs` and
+  `base_layer/transaction_components/src/key_manager/wallet_types.rs`. The known-answer vectors
+  (two seeds: words, entropy, both keys, both address forms) were produced by running that code,
+  and words this tool enciphers were decoded by its `CipherSeed::from_mnemonic`. **Not checked:**
+  a restore in a Tari wallet app and a pool payout.
 - **`firo`** — one of the two `(most keys)` rows. Version byte `0x52` puts the 25-byte payload
   astride the base58 boundary between digit 32 (`Z`) and digit 33 (`a`): the interval the payload
   can occupy lies 1.222% below that boundary and 98.778% above it, so 98.8% of keys render `a…` and
@@ -359,6 +382,7 @@ token's `--legacy` form and its WIF inherit the same assumption.
 --coin quantus:
 --coin nock:
 --coin xelis:
+--coin tari:
 ```
 
 Integers are decimal or `0x`-prefixed hex. An unrecognised parameter is rejected rather than

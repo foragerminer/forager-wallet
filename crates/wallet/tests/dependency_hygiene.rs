@@ -34,6 +34,11 @@
 /// brings no hashing, no `alloc` and no precomputed tables. It is pure computation and
 /// generation-side only, like the two above.
 ///
+/// `argon2`, `chacha20` (RustCrypto, MIT OR Apache-2.0) and `crc32fast` (MIT OR Apache-2.0) are
+/// the three algorithms of a Tari CipherSeed: Argon2d derives its keys, ChaCha20 enciphers it and
+/// CRC-32 checks it. `argon2` takes only `alloc`, `chacha20` only `cipher`, and `crc32fast` no `std`.
+/// All three are pure computation and generation-side only.
+///
 /// `pbkdf2` was already in the tree transitively via `bip32`, at the same version and feature
 /// selection, so declaring it directly added no crate. `unicode-normalization` is genuinely new:
 /// it is a pure-Rust Unicode data table with no I/O, and hand-rolling NFKD would be strictly worse
@@ -58,6 +63,9 @@ const ALLOWED: &[&str] = &[
     "ml-dsa",
     "qp-poseidon-core",
     "curve25519-dalek",
+    "argon2",
+    "chacha20",
+    "crc32fast",
 ];
 
 /// Parse the crate's own `[dependencies]` section into a list of dependency names.

@@ -58,6 +58,14 @@ qp-poseidon-core = { version = "=3.1.0", default-features = false }
 # dalek-cryptography crate Xelis itself uses, pure Rust, BSD-3-Clause. No default features: the
 # basepoint tables, `alloc` and the hashing helpers are unused; `zeroize` wipes the scalar.
 curve25519-dalek = { version = "4.1.3", default-features = false, features = ["zeroize"] }
+# Tari CipherSeed (the 24-word Tari seed): Argon2d derives the seed's encryption and MAC keys,
+# ChaCha20 encrypts its birthday, entropy and MAC, and CRC-32 checks the enciphered bytes. The
+# official wallet uses the same three algorithms (`tari_common_types::seeds::cipher_seed`). All
+# pure Rust. argon2 takes only `alloc` (its block buffer), so no password-hash string format and
+# no RNG.
+argon2 = { version = "0.6", default-features = false, features = ["alloc"] }
+chacha20 = { version = "0.10", default-features = false, features = ["cipher"] }
+crc32fast = { version = "1.5", default-features = false }
 
 # `bip32` is also a dev-dependency so the HD KATs can drive BIP32 CKDpriv directly against the
 # published BIP32 test vectors (an official-vector anchor for the non-circular per-coin address KATs).

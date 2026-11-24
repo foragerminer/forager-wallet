@@ -524,6 +524,47 @@ fn every_generated_xelis_address_round_trips_through_detection() {
     }
 }
 
+/// Every Tari address the generator emits, from entropies 1 to 16, is a mainnet one-sided address
+/// that detection claims. The first is entropy `00 01 .. 0f`, whose address and seed words
+/// `tari-project/tari@ae2296bc` itself produced and decoded. A corruption of the network or
+/// features character is never detected as Tari.
+#[test]
+fn every_generated_tari_address_round_trips_through_detection() {
+    let w = forager_wallet::address_from_secret(
+        "xtm",
+        "000102030405060708090a0b0c0d0e0f",
+        Network::Mainnet,
+    )
+    .unwrap();
+    assert_eq!(
+        w.address,
+        "12Do2V8XgiphRqp4461rUuuEDLetmW6aYuRsofejJF3ynJW9oCngb6RPE6q6iKyCjittwtfEi8SRT9JvJCBrmTTUXmR"
+    );
+    for i in 1u32..=16 {
+        let w = forager_wallet::address_from_secret("xtm", &format!("{i:032x}"), Network::Mainnet)
+            .unwrap();
+        assert!(w.address.starts_with("12"), "{}", w.address);
+        assert_eq!(
+            detect_family(&w.address),
+            Some(Family::Tari),
+            "{}",
+            w.address
+        );
+        assert_eq!(check(&w.address, Family::Tari), Verdict::Ok);
+        for pos in 0..2 {
+            for c in ['2', '3', '4', 'z'] {
+                let mut bad: Vec<char> = w.address.chars().collect();
+                if bad[pos] == c {
+                    continue;
+                }
+                bad[pos] = c;
+                let bad: String = bad.into_iter().collect();
+                assert_ne!(detect_family(&bad), Some(Family::Tari), "{bad}");
+            }
+        }
+    }
+}
+
 /// Every KAD address the generator emits classifies as the form the live chain issues.
 ///
 /// Kadikama is the coin table's one row where the chain params and the network's practice

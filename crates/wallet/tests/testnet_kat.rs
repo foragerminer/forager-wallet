@@ -206,6 +206,8 @@ fn declares_testnet(params: &coins::FamilyParams) -> bool {
         | coins::FamilyParams::Noid
         | coins::FamilyParams::Quantus
         | coins::FamilyParams::Nock
+        // Tari: only the mainnet network byte is modelled.
+        | coins::FamilyParams::Tari
         | coins::FamilyParams::Ethereum => false,
     }
 }
