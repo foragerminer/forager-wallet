@@ -522,7 +522,8 @@ string that is not a valid address for that chain.
 
 - **Nexa** looks CashAddr-like, but its payload framing differs from the Kaspa family, so
   `kaspa:prefix=nexa` yields a valid-looking address that Nexa will not credit.
-- **Radiant** and **Iron Fish** each use a scheme no family here models.
+- **Radiant** uses a scheme no family here models. **Iron Fish** is not supported at all; see
+  [Not supported, and why](#not-supported-and-why).
 - **Quai** scopes addresses to a shard and a ledger, so an EIP-55 address from `ethereum:` lands
   in the wrong zone 511 times in 512. Use `--coin quai` or `quai:`, which only print a Cyprus1
   Quai-ledger address.
@@ -532,3 +533,21 @@ string that is not a valid address for that chain.
 
 For those, the address family has to be implemented and KAT-gated. Open an issue rather than
 guessing a token.
+
+## Not supported, and why
+
+These coins have been asked for and are deliberately **not** in the coin table, so `list` does not
+show them and no `--coin` value or custom token reaches them. Generate their addresses with the
+official wallet named here, not with this tool.
+
+| Coin | Why not | Use instead |
+|---|---|---|
+| Abelian (ABEL) | Its addresses are post-quantum lattice keys, and no licensed, audited implementation of its key scheme exists outside the project's own wallet. Reimplementing it here would be the only check of itself. | Abelian Desktop Wallet Pro, or `abewalletmlp` |
+| QRL | Its keys are XMSS hash-based signatures, and there is no audited Rust XMSS implementation to build on. An XMSS key is also stateful: one used outside its own wallet can be made unsafe by reuse. | The official QRL wallet, wallet.theqrl.org |
+| Iron Fish (IRON) | The network went into maintenance mode in April 2026 ([Iron Fish Foundation, 2026-04-20](https://ironfish.network/learn/blog/2026-04-20)), and on 2026-10-30 an inflation vulnerability was disclosed, after which support for the network ended. New payout addresses on that chain are not something to encourage. | The official Iron Fish wallet, if you must |
+| Ryo (RYO) | It is CryptoNote-framed, but its key scheme is not Monero's, so neither the `cryptonote:` token nor any row here derives its keys or its seed correctly. | The official Ryo wallet |
+| Luxcoin (LUX) | The chain is inactive: there is no live network to pay out on. | — |
+
+A coin listed here can move into the table only the way every row did: from the coin's own source
+at a named commit, with known-answer vectors from its reference code, and a live address that the
+row decodes.
