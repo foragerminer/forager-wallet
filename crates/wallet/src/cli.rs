@@ -120,7 +120,9 @@ pub fn run(args: &[String]) -> Result<(), CliError> {
                 && coin
                     .as_deref()
                     .and_then(|c| crate::resolve_spec(c).ok())
-                    .is_some_and(|s| matches!(s.family(), Family::Nock | Family::Tari)) =>
+                    .is_some_and(|s| {
+                        matches!(s.family(), Family::Nock | Family::Tari | Family::Zano)
+                    }) =>
         {
             cmd_restore_phrase(args, coin.as_deref().unwrap_or_default())
         }
@@ -205,6 +207,16 @@ fn cmd_new(coin: &str, net: Network, legacy: bool, testnet: bool) -> Result<(), 
             for (i, word) in words.iter().enumerate() {
                 println!("    {:2}. {word}", i + 1);
             }
+        }
+        SecretStd::ZanoSeed(phrase) => {
+            println!(
+                "  26-word Zano seed phrase (NOT BIP39). THIS IS YOUR WALLET RESTORE KEY, back it up:"
+            );
+            for (i, word) in phrase.split_whitespace().enumerate() {
+                println!("    {:2}. {word}", i + 1);
+            }
+            println!();
+            println!("  seed hex : {}", w.secret_hex);
         }
         SecretStd::TariSeed(phrase) => {
             println!(
@@ -303,6 +315,15 @@ fn cmd_new(coin: &str, net: Network, legacy: bool, testnet: bool) -> Result<(), 
         );
         println!("`new --hd --coin quai` instead prints a BIP39 phrase and the path index Quai");
         println!("wallets reach, as `getNextAddress` does.");
+    }
+    if crate::resolve_spec(coin).map(|s| s.family()) == Ok(Family::Zano) {
+        println!();
+        println!("The 26 words are a Zano seed phrase with no password. Restore them in the");
+        println!("official Zano wallet (simplewallet --restore-wallet, or the GUI's restore from");
+        println!("seed phrase) and confirm that it shows the same address before mining to it.");
+        println!("The last two words record today's week and a checksum; the wallet scans from");
+        println!("that week. The seed hex re-derives the address with `restore`; no Zano wallet");
+        println!("imports it, so back up the words.");
     }
     if crate::resolve_spec(coin).map(|s| s.family()) == Ok(Family::Xelis) {
         println!();
@@ -447,17 +468,17 @@ fn cmd_new_hd(args: &[String]) -> Result<(), CliError> {
 fn cmd_restore_phrase(args: &[String], coin: &str) -> Result<(), CliError> {
     if parse_value(args, "--passphrase").is_some() || args.iter().any(|a| a == "--all") {
         return Err(err(
-            "Nockchain and Tari restore from the bare phrase: their official wallets use no \
-             passphrase here, and --all is for HD coins",
+            "Nockchain, Tari and Zano restore from the bare phrase: their official wallets use \
+             no passphrase here, and --all is for HD coins",
         ));
     }
     if args.iter().any(|a| a == "--testnet") {
         return Err(err(
-            "restore --mnemonic for Nockchain and Tari prints the mainnet address only",
+            "restore --mnemonic for Nockchain, Tari and Zano prints the mainnet address only",
         ));
     }
     let phrase = parse_value(args, "--mnemonic").ok_or_else(|| {
-        err("usage: forager-wallet restore --mnemonic \"<words>\" --coin <ticker>  (24 words for xtm)")
+        err("usage: forager-wallet restore --mnemonic \"<words>\" --coin <ticker>  (24 words for xtm, 26 for zano)")
     })?;
     let w = crate::address_from_mnemonic(coin, phrase).map_err(|e| err(e.to_string()))?;
     println!("{}", w.address);
@@ -536,6 +557,7 @@ fn family_label(family: Family) -> &'static str {
         Family::Nock => "Nockchain (base58 v1 payee hash, Tip5; no checksum)",
         Family::Xelis => "Xelis (bech32 xel:, Ristretto255)",
         Family::Tari => "Tari (base58 dual address, CipherSeed)",
+        Family::Zano => "Zano (Zx, 26-word seed phrase)",
     }
 }
 
@@ -630,6 +652,26 @@ mod tests {
         let seed = "d008285e7bbc3fc1374e12978cbb5a434a5e9e8129e26b883761f6ec6f2b385a";
         assert!(run(&argv(&["restore", seed, "--coin", "quan"])).is_ok());
         assert!(run(&argv(&["restore", "not-hex", "--coin", "quan"])).is_err());
+    }
+
+    #[test]
+    fn new_and_restore_zano() {
+        use crate::families::zano::tests::{SEQ_PHRASE, SEQ_SEED};
+        let phrase = SEQ_PHRASE.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(run(&argv(&["new", "--coin", "zano"])).is_ok());
+        assert!(run(&argv(&["new", "--coin", "zano", "--testnet"])).is_err());
+        assert!(run(&argv(&["restore", "--mnemonic", &phrase, "--coin", "zano"])).is_ok());
+        assert!(run(&argv(&["restore", SEQ_SEED, "--coin", "zano"])).is_ok());
+        let mut bad: Vec<&str> = phrase.split(' ').collect();
+        bad.swap(0, 1);
+        assert!(run(&argv(&[
+            "restore",
+            "--mnemonic",
+            &bad.join(" "),
+            "--coin",
+            "zano"
+        ]))
+        .is_err());
     }
 
     #[test]

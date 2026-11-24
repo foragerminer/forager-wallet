@@ -833,3 +833,23 @@ fn every_generated_quai_address_round_trips_through_detection() {
         );
     }
 }
+
+/// Every Zano address the generator emits is detected as Zano, never as CryptoNote, and no
+/// single-character corruption of one is.
+#[test]
+fn every_generated_zano_address_round_trips_through_detection() {
+    for i in 1u32..=4 {
+        let seed = format!("{i:064x}");
+        let w = forager_wallet::address_from_secret("zano", &seed, Network::Mainnet).unwrap();
+        assert!(w.address.starts_with("Zx"), "{}", w.address);
+        assert_eq!(w.address.len(), 97);
+        assert_eq!(detect_family(&w.address), Some(Family::Zano));
+        assert_eq!(check(&w.address, Family::Zano), Verdict::Ok);
+        for pos in 0..w.address.len() {
+            let mut bad = w.address.clone().into_bytes();
+            bad[pos] = if bad[pos] == b'2' { b'3' } else { b'2' };
+            let bad = String::from_utf8(bad).unwrap();
+            assert_ne!(detect_family(&bad), Some(Family::Zano), "{bad}");
+        }
+    }
+}

@@ -35,8 +35,8 @@ known-answer test. The exceptions are Parano1d (`noid`) and Nockchain (`nock`): 
 standard to re-derive from, so their constants are copied from the projects' reference code (see
 [`NOTICE`](NOTICE)). Parano1d's known-answer vectors were captured from that node's own key store;
 Nockchain's are the reference's own Hoon test vectors plus mnemonic-to-address vectors captured
-from the official `nockchain-wallet`. Xelis (`xel`) and Tari (`xtm`) also follow their reference
-code rather than a standard; their vectors were produced by running that code. That proves the *scheme* is right. It does not prove *your* address is right. Only an independent
+from the official `nockchain-wallet`. Xelis (`xel`), Tari (`xtm`) and Zano (`zano`) also follow
+their reference code rather than a standard; their vectors were produced by running that code. That proves the *scheme* is right. It does not prove *your* address is right. Only an independent
 re-derivation does that.
 
 1. Generate an address and back up the secret. It is printed once and never stored.
@@ -52,7 +52,12 @@ re-derivation does that.
      must match;
    - `xtm`: a Tari wallet, by restoring from the same 24 seed words (a Tari CipherSeed, not
      BIP39). It may show the default `14…` form of the address; the one-sided `12…` form printed
-     here has the same keys.
+     here has the same keys;
+   - `grs`: Groestlcoin Core (`importprivkey`) or Electrum-GRS, from the WIF, which carries
+     Groestlcoin's own checksum; a Bitcoin wallet will not read it;
+   - `quai`: Pelagus, by importing the `0x`-hex private key, or a Quai HD wallet from the
+     mnemonic at the printed path;
+   - `zano`: the official Zano wallet, by restoring from the same 26-word seed phrase.
 
    `forager-wallet restore` is a cheap first check, but it is **not independent** — it re-runs the
    same code that minted the address. Only other software proves the address.

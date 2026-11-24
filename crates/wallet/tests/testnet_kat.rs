@@ -241,6 +241,8 @@ fn declares_testnet(params: &coins::FamilyParams) -> bool {
         | coins::FamilyParams::Tari
         // Quai, like Ethereum, has one address form on every network.
         | coins::FamilyParams::Quai
+        // Zano: only the mainnet prefixes are modelled.
+        | coins::FamilyParams::Zano
         | coins::FamilyParams::Ethereum => false,
     }
 }

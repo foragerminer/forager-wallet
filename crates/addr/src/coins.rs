@@ -80,7 +80,21 @@ pub enum Family {
     /// one-sided address is 91 characters and opens `12`; the default (interactive and one-sided)
     /// form opens `14`.
     Tari,
+    /// Zano (ZANO): CryptoNote block-base58 of `varint(prefix) ‖ spend public ‖ view public [‖
+    /// flags] ‖ Keccak-256[..4]` over ed25519 keys, with prefix [`ZANO_ADDRESS_PREFIX`] (`Zx…`, no
+    /// flags byte) or [`ZANO_AUDITABLE_ADDRESS_PREFIX`] (`aZx…`, flags `0x01`). The layout is
+    /// CryptoNote's, but the keys come from a seed and a 26-word phrase no CryptoNote wallet reads,
+    /// so it is its own family: a Monero address is not a Zano payout.
+    Zano,
 }
+
+/// Zano's normal-address network prefix, `0xc5` (`Zx…`): `CURRENCY_PUBLIC_ADDRESS_BASE58_PREFIX`
+/// in `hyle-team/zano@d49f34aa` `src/currency_core/currency_config.h` L28.
+pub const ZANO_ADDRESS_PREFIX: u64 = 0xc5;
+
+/// Zano's auditable-address network prefix, `0x98c8` (`aZx…`):
+/// `CURRENCY_PUBLIC_AUDITABLE_ADDRESS_BASE58_PREFIX`, the same file L31.
+pub const ZANO_AUDITABLE_ADDRESS_PREFIX: u64 = 0x98c8;
 
 /// Groestlcoin's bech32 HRP on mainnet, `grs`. Source: `Groestlcoin/groestlcoin@17a57752`
 /// `src/kernel/chainparams.cpp` L182 (`bech32_hrp`).
@@ -289,6 +303,9 @@ pub enum FamilyParams {
     /// refused rather than printed. A separate variant because an `Ethereum` row accepts every key.
     /// Its [`Family`] is [`Family::Ethereum`]: the string is indistinguishable from one.
     Quai,
+    /// Zano has no per-coin parameters: its prefixes are the protocol constants
+    /// [`ZANO_ADDRESS_PREFIX`] and [`ZANO_AUDITABLE_ADDRESS_PREFIX`], and only mainnet is modelled.
+    Zano,
 }
 
 impl FamilyParams {
@@ -314,6 +331,7 @@ impl FamilyParams {
             FamilyParams::Nock => Family::Nock,
             FamilyParams::Xelis => Family::Xelis,
             FamilyParams::Tari => Family::Tari,
+            FamilyParams::Zano => Family::Zano,
         }
     }
 
@@ -1178,6 +1196,20 @@ pub static COINS: &[CoinSpec] = &[
         hd_slip44: None,
         params: FamilyParams::Tari,
     },
+    // ---- Zano family ----
+    // Zano (ZANO, ProgPowZ): spend secret = (seed ‖ Keccak256(seed)) mod l, view secret =
+    // Keccak256(spend) mod l, address = block-base58(varint(0xc5) ‖ spend_pub ‖ view_pub ‖
+    // Keccak256[..4]), secret = the 26-word seed phrase. Source:
+    // hyle-team/zano@d49f34aa8d7978586990aa83922df0f567a8ae3b src/crypto/crypto.cpp,
+    // src/currency_core/{account.cpp, currency_format_utils.cpp, currency_config.h},
+    // src/common/mnemonic-encoding.cpp. SLIP-44 1018 is registered to Zano, but Zano wallets derive
+    // no BIP44 path, so `hd_slip44: None`.
+    CoinSpec {
+        ticker: "zano",
+        name: "Zano",
+        hd_slip44: None,
+        params: FamilyParams::Zano,
+    },
     // SCASH ("Satoshi Cash", RandomX): address bytes left BYTE-IDENTICAL to Bitcoin — P2PKH
     // 0x00, WIF 0x80, bech32 HRP "bc"; testnet 0x6f/"tb". So a SCASH address is indistinguishable
     // from a BTC one (same encoder, same bytes).  Source: scashnetwork/scash (MIT),
@@ -1546,6 +1578,14 @@ pub static TOKEN_GRAMMAR: &[TokenSyntax] = &[
         caveat: None,
     },
     TokenSyntax {
+        family: "zano",
+        keys: &[],
+        flags: &[],
+        syntax: "zano:",
+        example: "zano:",
+        caveat: None,
+    },
+    TokenSyntax {
         family: "quai",
         keys: &[],
         flags: &[],
@@ -1693,6 +1733,7 @@ pub fn parse_token(token: &str) -> Result<CoinSpec, String> {
         "tari" => FamilyParams::Tari,
         "groestlcoin" => FamilyParams::Groestlcoin,
         "quai" => FamilyParams::Quai,
+        "zano" => FamilyParams::Zano,
         // Unreachable while `TOKEN_GRAMMAR` and this match list the same families — the lookup above
         // already rejected any name the grammar does not carry.  Report it instead of panicking, so a
         // grammar row added without an arm here degrades to a clear message; the
@@ -2089,6 +2130,7 @@ mod tests {
                 FamilyParams::Nock => Family::Nock,
                 FamilyParams::Xelis => Family::Xelis,
                 FamilyParams::Tari => Family::Tari,
+                FamilyParams::Zano => Family::Zano,
             };
             assert_eq!(spec.family(), expected, "{}", spec.ticker);
         }

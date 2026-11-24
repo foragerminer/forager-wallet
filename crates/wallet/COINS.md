@@ -29,6 +29,7 @@ Run `forager-wallet list` for the live table — this file documents it, and a t
 | Nockchain | base58 of the Tip5 digest of the master public key (v1 payee hash), no version byte, **no checksum** | Cheetah over Fp^6 (Goldilocks) |
 | Xelis | bech32 (classic checksum, not bech32m) with a `:` separator: `xel:` + (compressed `s^-1 * H` ‖ type `0x00`) | Ristretto255 |
 | Tari | base58(network) ‖ base58(features) ‖ base58(view key ‖ spend key ‖ DammSum), keys from a 24-word CipherSeed | Ristretto255 |
+| Zano | CryptoNote block-base58 of varint(0xc5) ‖ spend key ‖ view key ‖ Keccak-256[..4]; keys from a 32-byte seed and a 26-word phrase | ed25519 |
 
 ## The coin table
 
@@ -119,6 +120,7 @@ may carry exactly one of two markers, and a marker is the only way a row can cla
 | `nock` | Nockchain | Nockchain | no fixed prefix | — |
 | `xel` | Xelis | Xelis | `xel:…` | — |
 | `xtm` | Tari | Tari | `12…` | — |
+| `zano` | Zano | Zano | `Zx…` | — |
 
 These rows need a word of explanation:
 
@@ -251,6 +253,29 @@ These rows need a word of explanation:
   vectors are quais.js's own output (indices 139 and 918, and the index-139 private key), and two
   coinbase addresses of Cyprus1 block 6070247 are checked against the scope rule. **Not checked:**
   an import into Pelagus and a pool payout.
+- **`zano`** — Zano. The secret is a 26-word Zano **seed phrase** from Zano's own 1626-word list,
+  which is neither Monero's list nor BIP39. Words 1 to 24 carry a 32-byte seed, word 25 the week
+  the wallet was made (weeks since 2018-12-01; a restoring wallet scans from it), and word 26 a
+  checksum over the seed and that week. The spend key is the seed and its Keccak-256 reduced
+  modulo the ed25519 group order as one 64-byte integer, the view key is the Keccak-256 of the
+  spend key reduced the same way, and the address is the CryptoNote block-base58 of prefix `0xc5`,
+  both public keys and a Keccak-256 checksum: 97 characters, `Zx…`. The official wallet restores
+  the phrase (`simplewallet --restore-wallet`, or restore from seed phrase in the GUI) and nothing
+  else. `restore --mnemonic "<26 words>" --coin zano` checks the checksum word and re-derives the
+  address; a phrase whose last word sets the auditable flag restores the auditable `aZx…` address,
+  as the wallet does, and the old 25-word form (no checksum word) is accepted as the wallet accepts
+  it. A phrase made with a seed password is refused. `new` also prints the seed as 64 hex
+  characters, which `restore <hex> --coin zano` reads but no Zano wallet imports, so back up the
+  words. In the table the key `0000…0001` stands for that seed. Mainnet only; `new --hd` does not
+  apply (SLIP-44 registers 1018, but Zano wallets derive no BIP44 path). Detection reports `Zx…`
+  and `aZx…` as Zano, never as CryptoNote. Source: `hyle-team/zano@d49f34aa` (MIT; the word list
+  is BSD-3-Clause, see [`THIRD-PARTY.md`](../../THIRD-PARTY.md)), `src/crypto/crypto.cpp`,
+  `src/currency_core/account.cpp`, `currency_format_utils.cpp`, `currency_config.h` and
+  `src/common/mnemonic-encoding.cpp`. The checksum follows the C++, which writes a checksum of
+  813 as 0; `zano-utils-js` does not. The known-answer vectors are the C++ unit test's own phrase
+  and keys (`tests/unit_tests/wallet_seed_test.cpp`), the `zano-utils-js` spend-key-to-address
+  vector, and a generated phrase from an independent Python oracle. **Not checked:** a restore in
+  the official wallet and a pool payout.
 - **`firo`** — one of the two `(most keys)` rows. Version byte `0x52` puts the 25-byte payload
   astride the base58 boundary between digit 32 (`Z`) and digit 33 (`a`): the interval the payload
   can occupy lies 1.222% below that boundary and 98.778% above it, so 98.8% of keys render `a…` and
@@ -418,6 +443,7 @@ token's `--legacy` form and its WIF inherit the same assumption.
 --coin tari:
 --coin groestlcoin:
 --coin quai:
+--coin zano:
 ```
 
 Integers are decimal or `0x`-prefixed hex. An unrecognised parameter is rejected rather than
@@ -471,11 +497,14 @@ GUXByHDZLvU4DnVH9imSFckt3HEQ5cFgE5
 ```
 
 **A CryptoNote fork** — the network prefix is `CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX` in the
-project's `cryptonote_config.h`:
+project's `cryptonote_config.h` (Wownero's is 4146, `wownero-project/wownero`
+`src/cryptonote_config.h`). The token keeps Monero's keys and 25-word seed, so it fits a fork
+that kept them, and not Zano, whose prefix 197 renders the same `Zx…` over different keys: use
+`--coin zano`.
 
 ```sh
-$ forager-wallet inspect 0000…0001 --coin cryptonote:net=197
-ZxByaM2T8UWfjxvvnypP2e8LU1ibmAxDkKYti8jNkuseccSWJnHcz3jSh5gFDmazLoSxLuKU6G8pr6WL4cJDTrAk1cmKr5MF5
+$ forager-wallet inspect 0000…0001 --coin cryptonote:net=4146
+Wo3LCzLgz9UfjxvvnypP2e8LU1ibmAxDkKYti8jNkuseccSWJnHcz3jSh5gFDmazLoSxLuKU6G8pr6WL4cJDTrAk1cmFW5utL
 ```
 
 **Bitcoin Taproot** — the `taproot:` family with Bitcoin's HRP:
@@ -493,9 +522,10 @@ string that is not a valid address for that chain.
 
 - **Nexa** looks CashAddr-like, but its payload framing differs from the Kaspa family, so
   `kaspa:prefix=nexa` yields a valid-looking address that Nexa will not credit.
-- **Radiant**, **Zano**, **Xelis**, **Iron Fish** and **Quai** each use a scheme no family here
-  models. Quai additionally scopes addresses to a shard, so an EIP-55 address from `ethereum:` can
-  land in the wrong zone.
+- **Radiant** and **Iron Fish** each use a scheme no family here models.
+- **Quai** scopes addresses to a shard and a ledger, so an EIP-55 address from `ethereum:` lands
+  in the wrong zone 511 times in 512. Use `--coin quai` or `quai:`, which only print a Cyprus1
+  Quai-ledger address.
 - A coin whose legacy P2PKH parameters equal Bitcoin's (Radiant is `ver=0`, `wif=128`) produces
   addresses indistinguishable from Bitcoin's, which also defeats the payout-address pre-flight
   check in the Forager miner.

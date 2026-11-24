@@ -320,7 +320,13 @@ fn leading_characters(spec: &coins::CoinSpec) -> Leading {
         // varint plus whatever spend-key bytes it leaves room for — 7 for Monero's one-byte
         // prefix, 3 for Zephyr's five-byte one. Fixed-width blocks cannot change length with the
         // value, which is exactly what lets these rows be decided where Alephium's cannot.
-        coins::FamilyParams::CryptoNote { network_byte, .. } => {
+        // Zano mints its normal address, `varint(0xc5) ‖ spend ‖ view ‖ Keccak[..4]`, in the same
+        // fixed-width blocks, so the same bracket decides it.
+        coins::FamilyParams::CryptoNote { .. } | coins::FamilyParams::Zano => {
+            let network_byte = match spec.params {
+                coins::FamilyParams::CryptoNote { network_byte, .. } => network_byte,
+                _ => coins::ZANO_ADDRESS_PREFIX,
+            };
             let mut lo = Vec::new();
             cryptonote::write_varint(network_byte, &mut lo);
             let mut hi = lo.clone();

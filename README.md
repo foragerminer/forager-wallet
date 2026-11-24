@@ -1,6 +1,6 @@
 # Forager Wallet
 
-**Offline payout-address and key generation for 66 cryptocurrencies.** No pool, no GPU, no network.
+**Offline payout-address and key generation for 67 cryptocurrencies.** No pool, no GPU, no network.
 
 ```sh
 cargo install forager-wallet
@@ -24,8 +24,8 @@ known-answer test. The exceptions are Parano1d (`noid`) and Nockchain (`nock`), 
 standard to re-derive from: their constants are copied from the projects' reference code (see
 [`NOTICE`](NOTICE)). Parano1d's known-answer vectors were captured from that node's own key
 store; Nockchain's are the reference's own Hoon test vectors plus mnemonic-to-address vectors
-captured from the official `nockchain-wallet`. Xelis (`xel`) and Tari (`xtm`) also follow their
-reference code rather than a standard; their vectors were produced by running that code. That proves the *scheme*. It does not prove *your* address. Only an independent re-derivation does
+captured from the official `nockchain-wallet`. Xelis (`xel`), Tari (`xtm`) and Zano (`zano`) also
+follow their reference code rather than a standard; their vectors were produced by running that code. That proves the *scheme*. It does not prove *your* address. Only an independent re-derivation does
 that.
 
 1. Generate an address and back up the secret. It is printed once and never stored.
@@ -35,7 +35,8 @@ that.
    a `nock` mnemonic. A Nockchain address has no checksum, so a mistyped one is still valid. For
    `xel`, the official Xelis wallet's `recover_private_key` command, from the 64-hex key. For
    `xtm`, a Tari wallet's restore from the 24 seed words; it may show the `14…` form of the
-   address, which has the same keys as the `12…` one printed here.
+   address, which has the same keys as the `12…` one printed here. For `zano`, the official Zano
+   wallet's restore from the 26-word seed phrase.
    (`forager-wallet restore` re-derives
    it too, from either the hex, the WIF, or the mnemonic — useful as a first check, but it is not
    independent of this tool.)
@@ -112,15 +113,15 @@ The miner's value is its optimized kernels. This tool's value is that you can re
 Key generation is the one thing a user should never run closed-source: a backdoored entropy source
 is undetectable from the outside and would steal every coin ever mined to the resulting address.
 Nothing here is proprietary — BIP32/39/44, secp256k1, Ed25519, bech32/bech32m, base58check
-(with Groestlcoin's Groestl-512 checksum), CashAddr and EIP-55 are public standards, and the Parano1d, Nockchain, Xelis and Tari address schemes are
+(with Groestlcoin's Groestl-512 checksum), CashAddr and EIP-55 are public standards, and the Parano1d, Nockchain, Xelis, Tari and Zano address schemes are
 open-source reference code — so publishing costs nothing and buys a claim that can actually be verified.
 
 ## Supported coins
 
-66 coins across seventeen address families: Taproot (bech32m), SegWit v0 (bech32), P2PKH
+67 coins across eighteen address families: Taproot (bech32m), SegWit v0 (bech32), P2PKH
 (base58check), Ethereum (EIP-55), CryptoNote/Monero, Kaspa-family (CashAddr), Ergo, Alephium, XDAG,
 Warthog, Epic Cash epicbox, Conflux Core Space (CIP-37), Parano1d, Quantus (SS58), Nockchain
-(base58 of a Tip5 digest), Xelis (bech32 `xel:`) and Tari (base58 dual address). Two curves, secp256k1 and Ed25519, carry all
+(base58 of a Tip5 digest), Xelis (bech32 `xel:`), Tari (base58 dual address) and Zano (`Zx…`). Two curves, secp256k1 and Ed25519, carry all
 of them but Parano1d, whose address is a Poseidon2b hash of the secret itself, Quantus, whose
 address hashes an ML-DSA-87 public key, Nockchain, whose key lives on the Cheetah curve over a
 degree-6 extension of the Goldilocks field, and Xelis and Tari, whose keys are Ristretto255 points. For `noid`
@@ -128,7 +129,8 @@ the printed secret is the wallet master secret the official Parano1d wallet impo
 is the 32-byte ML-DSA-87 seed. For `nock` it is a 24-word BIP39 mnemonic, restored with `restore
 --mnemonic`. For `xel` it is the 64-hex private key the official Xelis wallet restores with
 `recover_private_key`. For `xtm` it is a 24-word Tari CipherSeed (not BIP39), restored with
-`restore --mnemonic`.
+`restore --mnemonic`. For `zano` it is the 26-word Zano seed phrase the official wallet restores
+from, restored here with `restore --mnemonic`.
 
 **[crates/wallet/COINS.md](crates/wallet/COINS.md)** documents every coin with its address form and
 HD path, the three HD purposes (BIP44 / BIP84 / BIP86), and how to generate for a coin that is not

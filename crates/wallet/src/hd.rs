@@ -212,7 +212,8 @@ impl HdAccount {
             | SecretStd::EthHex(s)
             | SecretStd::RawHex(s)
             | SecretStd::Mnemonic(s)
-            | SecretStd::TariSeed(s) => s,
+            | SecretStd::TariSeed(s)
+            | SecretStd::ZanoSeed(s) => s,
             // HD derivation never produces a CryptoNote seed: that family has no BIP32 path.
             SecretStd::MoneroMnemonic { view_key_hex, .. } => view_key_hex,
         }

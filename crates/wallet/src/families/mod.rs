@@ -15,3 +15,4 @@ pub(crate) mod tari;
 pub(crate) mod warthog;
 pub(crate) mod xdag;
 pub(crate) mod xelis;
+pub(crate) mod zano;

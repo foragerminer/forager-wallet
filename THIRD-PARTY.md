@@ -3404,7 +3404,49 @@ Not a crate dependency, so `cargo metadata` does not list it.
 |---|---|---|---|---|
 | [Parano1d](https://git.parano1d.org/ignotusnemo/parano1d) | `52938433` | Apache-2.0 | Poseidon2b round constants, MDS entries and tower/flat change-of-basis tables; the address and master-to-spend derivations | `crates/wallet/src/poseidon2b/`, `crates/wallet/src/families/noid.rs` |
 | [Nockchain](https://github.com/zorp-corp/nockchain) | `ed1edfcc` | MIT OR Apache-2.0, used under Apache-2.0 | Tip5 lookup table, round constants and MDS column; Cheetah generator and group order; the SLIP-10 master-key, public-key and payee-hash constructions; the Hoon known-answer vectors | `crates/wallet/src/nock/`, `crates/wallet/src/families/nock.rs`, `crates/addr/src/codec/nock.rs` |
+| [Zano](https://github.com/hyle-team/zano) | `d49f34aa` | BSD-3-Clause (the file's header; the repository is MIT) | The 1626-word seed-phrase word list, verbatim and in order, from `src/common/mnemonic-encoding.cpp` | `crates/wallet/src/wordlist_zano_en.rs` |
 
 Apache-2.0's full text is in [`LICENSE`](LICENSE). The attribution notices it requires, Parano1d's
 own and the hekate-math and binius64 notices it carries, are reproduced in [`NOTICE`](NOTICE), as is the
 Nockchain attribution (that repository ships no NOTICE file of its own).
+
+The Zano word list is data, not code, and is used under the BSD-3-Clause license in the header of
+the file it comes from, reproduced verbatim:
+
+```
+// Copyright (c) 2014, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+/*
+ * This file and its cpp file are for translating Electrum-style word lists
+ * into their equivalent byte representations for cross-compatibility with
+ * that method of "backing up" one's wallet keys.
+ */
+// Copyright (c) 2014-2018 Zano Project
+// Copyright (c) 2014-2018 The Louisdor Project
+```

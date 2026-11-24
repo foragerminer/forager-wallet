@@ -28,7 +28,8 @@ use crate::codec::{base58, bech32, cashaddr, conflux, cryptonote, nock, tari};
 use crate::coins::{
     Family, FamilyParams, COINS, EPICBOX_VERSION, GROESTLCOIN_HRP, GROESTLCOIN_P2PKH_VERSION,
     GROESTLCOIN_P2PKH_VERSION_TESTNET, NOID_ADDRESS_LEN, NOID_HRP, QUANTUS_SS58_PREFIX,
-    TARI_NETWORK_MAINNET, XELIS_HRP, XELIS_HRP_TESTNET, XELIS_SEPARATOR,
+    TARI_NETWORK_MAINNET, XELIS_HRP, XELIS_HRP_TESTNET, XELIS_SEPARATOR, ZANO_ADDRESS_PREFIX,
+    ZANO_AUDITABLE_ADDRESS_PREFIX,
 };
 
 /// Characters in a Warthog address: 24 bytes (`hash160(20) ‖ checksum(4)`), two nibbles each.
@@ -50,7 +51,8 @@ const EPICBOX_PAYLOAD_LEN: usize = 35;
 /// quadratic on input somebody else chooses is a denial-of-service shape.
 ///
 /// 128 is the smallest round number comfortably clear of everything detection can legitimately
-/// classify. The longest is a 95-character CryptoNote address
+/// classify. The longest is a 99-character auditable Zano address (`aZx…`, [`zano_family`]); the
+/// longest plain CryptoNote one is 95 characters
 /// (`varint(prefix) ‖ spend(32) ‖ view(32) ‖ checksum(4)` through the block-base58 scheme — see
 /// [`cryptonote_tag`]); a `karlsentest:` version-1 Kaspa address is 75, a bech32m Taproot address
 /// 62, a base58check P2PKH address 35. The margin leaves room for a longer prefix a future coin row
@@ -253,6 +255,13 @@ pub fn detect_family(addr: &str) -> Option<Family> {
         return Some(family);
     }
 
+    // 4d. Zano: CryptoNote's block-base58 layout under Zano's two prefixes, checksum verified. See
+    //     [`zano_family`]. No CryptoNote row carries either prefix, so the arm below never
+    //     claims a Zano address.
+    if let Some(family) = zano_family(a) {
+        return Some(family);
+    }
+
     // 5. CryptoNote / Monero: block-base58, `varint(prefix) ‖ spend(32) ‖ view(32) ‖ checksum(4)`,
     //    with the Keccak-256 checksum verified. Keyed on the coin table, so a fork with a
     //    multi-byte prefix (Zephyr `ZEPHYR…`, Salvium `SaLv…`) is recognised too — a
@@ -379,6 +388,7 @@ pub fn family_name(f: Family) -> &'static str {
         Family::Quantus => "Quantus (SS58 189, qz)",
         Family::Nock => "Nockchain (base58 payee hash, no checksum)",
         Family::Xelis => "Xelis (bech32 xel:)",
+        Family::Zano => "Zano (Zx / aZx)",
         Family::Tari => "Tari (base58 dual address)",
     }
 }
@@ -732,6 +742,34 @@ fn xelis_family(a: &str) -> Option<Family> {
 fn tari_family(a: &str) -> Option<Family> {
     let bytes = tari::decode(a)?;
     (bytes[0] == TARI_NETWORK_MAINNET).then_some(Family::Tari)
+}
+
+/// Whether `a` is a Zano address: CryptoNote block-base58 decoding to `varint(prefix) ‖ spend(32) ‖
+/// view(32) [‖ flags] ‖ Keccak-256[..4]`, either the normal prefix [`ZANO_ADDRESS_PREFIX`] with no
+/// flags byte (`Zx…`, 97 characters) or the auditable prefix [`ZANO_AUDITABLE_ADDRESS_PREFIX`] with
+/// the flags byte `0x01` (`aZx…`, 99 characters). Integrated addresses (with a payment id) are not
+/// payout addresses and are not claimed.
+///
+/// Source: `hyle-team/zano@d49f34aa` `src/currency_core/currency_format_utils.cpp`
+/// (`get_account_address_as_str`, `get_account_address_and_payment_id_from_str`) and
+/// `src/common/base58.cpp` (Monero's block base58). The keys are not checked to be curve points:
+/// that needs curve arithmetic, which this crate does not contain.
+fn zano_family(a: &str) -> Option<Family> {
+    if !(a.starts_with("Zx") || a.starts_with("aZx")) || !a.bytes().all(is_base58_char) {
+        return None;
+    }
+    let raw = cryptonote::decode(a)?;
+    let (body, checksum) = raw.split_at(raw.len().checked_sub(CRYPTONOTE_CHECKSUM_LEN)?);
+    let (prefix, rest) = cryptonote::read_varint(body)?;
+    let shape_ok = match prefix {
+        ZANO_ADDRESS_PREFIX => rest.len() == CRYPTONOTE_KEYS_LEN,
+        ZANO_AUDITABLE_ADDRESS_PREFIX => {
+            rest.len() == CRYPTONOTE_KEYS_LEN + 1 && rest[CRYPTONOTE_KEYS_LEN] == 0x01
+        }
+        _ => false,
+    };
+    (shape_ok && crate::hash::keccak256(body)[..CRYPTONOTE_CHECKSUM_LEN] == *checksum)
+        .then_some(Family::Zano)
 }
 
 /// Whether a decoded base58check payload is `version ‖ hash160` for a version prefix the coin table
@@ -2215,5 +2253,59 @@ mod tests {
         let mut payload = vec![GROESTLCOIN_P2PKH_VERSION];
         payload.extend_from_slice(&hash160);
         assert_eq!(detect_family(&base58::encode_check(&payload)), None);
+    }
+
+    /// Zano addresses: the C++ unit-test keys' normal and auditable addresses, the
+    /// `zano-utils-js` vector, and the generated-seed vector of `forager-wallet`'s `families/zano.rs`.
+    const ZANO_ADDRESSES: [&str; 4] = [
+        "ZxDachPpH6Wc6PU36Se55dPEWd2SjkZQaNRrbCZJQihw2M5YYfeSsogUncHPCHDkG3XYGviMCXoWrNqvUz6QUJyw13Gemoa6u",
+        "aZxbFpPZMLTM3QBvFLgNXu4S4cFnru9Lz3bNg6oxtXxyL5FNavPBvpGcQG4UgDHaw4XE9PAJFDikCdiXMCPU3QUvc8SGZQwdbWo",
+        "ZxDFpn4k7xVYyc9VZ3LphrJbkpc46xfREace5bme1aXiMzKPAHA8jsTWcHSXhv9AdodSaoGXK9Mg7bk3ec4FkQrj357fZPWZX",
+        "ZxCrb7RQme5crtLnBWbd1SDCxFWaqSeMVVrVDaQanwdPBuUcWX2mWdKRR2NS7Smi6yZ2pWhgrjcLpPvxFoEGEUq71g1X7RwaP",
+    ];
+
+    #[test]
+    fn detects_zano_normal_and_auditable() {
+        for a in ZANO_ADDRESSES {
+            assert_eq!(detect_family(a), Some(Family::Zano), "{a}");
+            assert_eq!(check(a, Family::Zano), Verdict::Ok);
+            assert!(matches!(
+                check(a, Family::CryptoNote),
+                Verdict::Mismatch {
+                    detected: Family::Zano,
+                    ..
+                }
+            ));
+        }
+        assert_eq!(ZANO_ADDRESSES[0].len(), 97);
+        assert_eq!(ZANO_ADDRESSES[1].len(), 99);
+    }
+
+    #[test]
+    fn a_corrupted_zano_address_is_not_zano() {
+        for a in ZANO_ADDRESSES {
+            for pos in 0..a.len() {
+                let mut bad = a.as_bytes().to_vec();
+                bad[pos] = if bad[pos] == b'2' { b'3' } else { b'2' };
+                let bad = String::from_utf8(bad).unwrap();
+                assert_ne!(detect_family(&bad), Some(Family::Zano), "{bad}");
+            }
+        }
+        // The normal prefix with a flags byte, and the auditable prefix without one, are not
+        // addresses the wallet prints.
+        let keys = [7u8; 64];
+        for (prefix, flags) in [
+            (ZANO_ADDRESS_PREFIX, Some(0x01u8)),
+            (ZANO_AUDITABLE_ADDRESS_PREFIX, None),
+            (ZANO_AUDITABLE_ADDRESS_PREFIX, Some(0x00)),
+        ] {
+            let mut body = Vec::new();
+            cryptonote::write_varint(prefix, &mut body);
+            body.extend_from_slice(&keys);
+            body.extend(flags);
+            let ck = crate::hash::keccak256(&body);
+            body.extend_from_slice(&ck[..4]);
+            assert_eq!(detect_family(&cryptonote::encode(&body)), None);
+        }
     }
 }
