@@ -476,6 +476,94 @@ fn zer_transparent_bip44_vector() {
 
 // ---- BIP84 / BIP86 / Ethereum-family purposes ----
 
+// BIP44 vectors for the rows added from each coin's own chain parameters, at
+// `m/44'/<slip44>'/0'/0/0` from `ABANDON`. Produced by the same kind of from-scratch Python oracle
+// described at the top of this file (PBKDF2 seed, BIP32 CKDpriv, secp256k1, base58check), which
+// in the same run reproduced the `btc` BIP44 vector above and the `btc` BIP86 vector below before
+// these were taken. The SLIP-44 numbers are each row's registered coin type (see `coins.rs`).
+#[test]
+fn source_verified_rows_bip44_vectors() {
+    for (sym, addr, wif) in [
+        (
+            "xvg",
+            "DHCD9c9uLJH4pUBZ32ttRPpwKiE8GzCGYt",
+            "QSp4sRY4ocBPMACsNcnuKAWTDVfnWxv42cBLkphcZNRPJ1urfB2h",
+        ),
+        (
+            "zny",
+            "ZknDQFGSB7J148rVo7Nvfo3F3MUVDRkUdy",
+            "KxtNvnUq1UzzZXTpETi6JM6ezFjY3pfWMXifGQZF4BTQYEfVKEVN",
+        ),
+        (
+            "ytn",
+            "YTfmq67Lu9YLkBjZiRDCSHWQ8gFjyRYswj",
+            "KJQXLMi9TfVMFNT1AGTbNmRULUraSiptsgy22UZL7CWQiuZHtERx",
+        ),
+        (
+            "avn",
+            "RBxeQFy1HcjDUf4ySSk2Pyy8jiSzrXEfBz",
+            "KzA4dEn6RAQTAGByKWzULLYopatXQJUkX3LA94iU9cGkr31JBvAF",
+        ),
+        (
+            "lcc",
+            "CWEE7oA5pgqZweRrtmmkbNgxMFo4ju7TZb",
+            "T73fwtvipMtmzrnhBw8EKwJTVyzE6EZvbraS4cfkDLe8pi9f7u9o",
+        ),
+        (
+            "ftc",
+            "6rZm13dAgf3Dq1TDnkiQHs8EbXZFfoRFsp",
+            "N5JLc8uWU1fonr9Hbr6Y5o7rNQfAyXg6RvFYkVkpPCPJFL8j5ZeZ",
+        ),
+        (
+            "btx",
+            "2bQSvCCnR4LVghcEsVeKW4FxAaa87uC3kD",
+            "L2NZWXe2G81Nui1ZS6C1Q5GzUiTW4kQsPsx8vMvoZ3rpcccnS82T",
+        ),
+        (
+            "dnr",
+            "D9m78u7P4WGLrVA85toueYraTYJq2WYH2q",
+            "QPEWTvQJcP9E1gPFDD5ucjkAHt871d5p9ms7TBYsSKSM7dwuR1Go",
+        ),
+        (
+            "scc",
+            "sNQusUHQM7cRr9HYgYYZVqJT3EePx392Zd",
+            "eYCPTgsFCYE8zTX8NeghDuSTzNyLDAUUPApCmSrvXzp9K3cj5KGr",
+        ),
+        (
+            "yec",
+            "s1Xy29hmVb4oYQhdeCNgY5zzfEaErXUd7Bj",
+            "L1w6hEZ6T2Ytqti9XJwmC49dbsFD4KsotgHxAh1nEiWBKnoobneA",
+        ),
+        (
+            "zcl",
+            "t1aoCKmXsNyAmTbYGmrRxBs5VsiAymHKawe",
+            "L3SjC8A4r2Vmgr4tSV5aMNJJPA4RjRat2cA58PTBx47GTghELorY",
+        ),
+        (
+            "ltz",
+            "L1VMaMALqMtsbT9t2HUQktM8ketXpyQXV6F",
+            "L3yRWJ9rLLceyqPRZB6dSRCCto1CsakNP7DF8AaXWqXKGAZFEGmU",
+        ),
+        (
+            "grlc",
+            "GMeXDSuqMCK3UKPLq4B4cCkQthfQTVtRoT",
+            "T3JxTsQ7eUFoP4t99kYZegxmqnvswkm9ELGSuMcdv8s87WBvChzC",
+        ),
+        (
+            "kcn",
+            "CM8WQyNh1xhho1gaU9QwBjtTyaJovZjji3",
+            "Afhe5u69GdyhqP4U9WLdMoBszqfDPLAsSAGD29Lmc5CeBguneCgi",
+        ),
+        (
+            "rin",
+            "RAHpFzZr2UxuHu8NymK2mQJjvHkEe5LP5J",
+            "UpjUaK6okpBXsQAVNGmC53Q2jW3M3pLvj8xuwFQyPmBFV2FPmKLz",
+        ),
+    ] {
+        check(sym, addr, wif);
+    }
+}
+
 /// Assert a coin derives the expected address AND secret at `m/<purpose>'/slip44'/0'/0/0`.
 fn check_at(sym: &str, purpose: hd::Purpose, expect_addr: &str, expect_secret: &str) {
     let coin = hd::lookup(sym).unwrap_or_else(|| panic!("{sym} must be HD-capable"));
@@ -520,6 +608,40 @@ fn vtc_bip84_vector() {
         "vtc1q758cxdacrl2unt9a727hgty7c2707schku355t",
         "Kyo7w21dfXKjqei3pXRsW37wD3SbRTuEDxc8NX4LJtWcNhFmNuGJ",
     );
+}
+
+/// BIP84 and BIP86 vectors for the SegWit v0 rows added from source (`kcn` SLIP-44 942, `rin`
+/// 9555), from the same oracle as `source_verified_rows_bip44_vectors`.
+#[test]
+fn source_verified_segwit_rows_bip84_bip86_vectors() {
+    for (sym, purpose, addr, wif) in [
+        (
+            "kcn",
+            hd::Purpose::Bip84,
+            "kc1qg32gls3y7z33g2ev0286avnxgwzkedp6gw7m9q",
+            "AiMymGCVsvZDeVN9wBfmuf3wpauW7yFfBVfEmTh8kSvGHAVoprJC",
+        ),
+        (
+            "kcn",
+            hd::Purpose::Bip86,
+            "kc1p0e3tmu9rte0fe4cefga645sp2l4e3upzdhl9kg3vw7xn6mr05r0q6t5j3d",
+            "AhMhe8fFNPoB3yjcmriu1bZVWxDZ6otXDHUu5v6T4R6rdAJZ6Sqi",
+        ),
+        (
+            "rin",
+            hd::Purpose::Bip84,
+            "rin1q7a7cvp0vdge0xtpr2s5nnlaah8k5p2w05kmnq6",
+            "UuPkCmz7GW68uqgcm798CZ3X2Y5faSeD4QW9X1rewcx8pg3PD2gJ",
+        ),
+        (
+            "rin",
+            hd::Purpose::Bip86,
+            "rin1ppm04r9cturp0gk8xjnjwmn6husf9yxj5plhyasmney5na5vfu7eq7flwg5",
+            "UvZbC1b4BRv2LKamceq3C3vwnLbfG2NQZKbAZgGwj1z5ZDzE9bZk",
+        ),
+    ] {
+        check_at(sym, purpose, addr, wif);
+    }
 }
 
 // BIP86 — Taproot key-path at m/86'. The oracle's Taproot tweak was anchored against this crate's

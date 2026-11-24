@@ -1,6 +1,6 @@
 # Forager Wallet
 
-**Offline payout-address and key generation for 38 cryptocurrencies.** No pool, no GPU, no network.
+**Offline payout-address and key generation for 63 cryptocurrencies.** No pool, no GPU, no network.
 
 ```sh
 cargo install forager-wallet
@@ -115,7 +115,7 @@ open-source reference code — so publishing costs nothing and buys a claim that
 
 ## Supported coins
 
-38 coins across sixteen address families: Taproot (bech32m), SegWit v0 (bech32), P2PKH
+63 coins across sixteen address families: Taproot (bech32m), SegWit v0 (bech32), P2PKH
 (base58check), Ethereum (EIP-55), CryptoNote/Monero, Kaspa-family (CashAddr), Ergo, Alephium, XDAG,
 Warthog, Epic Cash epicbox, Conflux Core Space (CIP-37), Parano1d, Quantus (SS58), Nockchain
 (base58 of a Tip5 digest) and Xelis (bech32 `xel:`). Two curves, secp256k1 and Ed25519, carry all

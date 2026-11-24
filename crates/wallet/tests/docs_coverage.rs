@@ -379,19 +379,30 @@ fn leading_characters(spec: &coins::CoinSpec) -> Leading {
 /// 32 (`Z`) and digit 33 (`a`): the interval `[0x52·256²⁴, 0x53·256²⁴)` sits 1.222% below
 /// `33·58³³` and 98.778% above it. `0x3e` = 62 is the *smallest* private key on the low side —
 /// every key from 1 to 61 mints `a…`.
-const MAJORITY_ONLY_COUNTEREXAMPLES: &[(&str, &str, &str)] = &[(
-    "firo",
-    "000000000000000000000000000000000000000000000000000000000000003e",
-    "ZzzAu2nHnHNxMea5vbLyeD4nejtXDW57wY",
-)];
+///
+/// `ftc`'s version byte 0x0e puts the payload astride the boundary between `6` and `7`: about
+/// 91.1% of the interval lies below `6·58³³`. `0x12` = 18 is the smallest private key that mints
+/// `7…`.
+const MAJORITY_ONLY_COUNTEREXAMPLES: &[(&str, &str, &str)] = &[
+    (
+        "firo",
+        "000000000000000000000000000000000000000000000000000000000000003e",
+        "ZzzAu2nHnHNxMea5vbLyeD4nejtXDW57wY",
+    ),
+    (
+        "ftc",
+        "0000000000000000000000000000000000000000000000000000000000000012",
+        "71hVNf2AEEEgM1RPzGVnRDr2eF6DpC4VPe",
+    ),
+];
 
 /// Rows marked [`SAMPLED`]: those [`leading_characters`] decides neither way, with the reason.
 ///
 /// **Empty, and that is the goal state** — every row in the table is currently proved outright
-/// except `firo`, which is refuted outright. The list exists because the alternative is the
-/// failure this file is here to prevent: a row no argument covers quietly passing on one lucky
-/// key, with the doubt recorded in prose the build cannot fail on. An entry is an admission, not
-/// an exemption — the row still carries a visible marker in `COINS.md` and is still swept by
+/// except `firo` and `ftc`, which are refuted outright. The list exists because the alternative
+/// is the failure this file is here to prevent: a row no argument covers quietly passing on one
+/// lucky key, with the doubt recorded in prose the build cannot fail on. An entry is an admission,
+/// not an exemption — the row still carries a visible marker in `COINS.md` and is still swept by
 /// [`a_prefix_that_is_not_proved_for_every_key_is_swept_over_many_keys`].
 const UNDECIDED_BY_ANALYSIS: &[(&str, &str)] = &[];
 

@@ -435,8 +435,9 @@ mod tests {
         assert_eq!(
             tickers,
             [
-                "btc", "ltc", "vtc", "doge", "rvn", "firo", "mewc", "etc", "eth", "ubq", "zec",
-                "btg", "kmd", "btcz", "zer"
+                "btc", "ltc", "vtc", "kcn", "rin", "doge", "rvn", "firo", "mewc", "xvg", "zny",
+                "ytn", "avn", "lcc", "ftc", "btx", "dnr", "scc", "grlc", "etc", "eth", "ubq",
+                "zec", "btg", "kmd", "btcz", "zer", "yec", "zcl", "ltz"
             ]
         );
         for c in supported() {
@@ -451,10 +452,14 @@ mod tests {
         // `pearl`, `ethw`, `octa` and `kad` are absent for the second reason: SLIP-44 registers no
         // coin type for them, and inventing one would produce a path no other wallet reproduces.
         // `kad` is worth naming because it is the one of those whose family *is* HD-capable — a
-        // base58 P2PKH row — so only its missing SLIP-44 type keeps it out.
+        // base58 P2PKH row — so only its missing SLIP-44 type keeps it out. The same holds for
+        // `qtc`, `lpepe`, `tls`, `vrsc`, `xmg`, `xbtx` and `plx` (no SLIP-44 row), for `glink` (its
+        // source's coin type 407 is registered to HDDCash) and for `rtm` (SLIP-44 lists 10226, but
+        // Raptoreum Core derives at 200, so neither path would match both).
         for t in [
             "pearl", "ethw", "octa", "xmr", "kas", "kls", "spr", "erg", "alph", "xdag", "scash",
-            "alpha", "kad",
+            "alpha", "kad", "qtc", "lpepe", "tls", "rtm", "vrsc", "glink", "plx", "opca", "xmg",
+            "xbtx",
         ] {
             assert!(lookup(t).is_none(), "{t} must not be HD-capable");
         }
