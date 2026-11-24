@@ -8,6 +8,7 @@ pub(crate) mod groestlcoin;
 pub(crate) mod nock;
 pub(crate) mod noid;
 pub mod p2pkh;
+pub(crate) mod quai;
 pub(crate) mod quantus;
 pub(crate) mod segwitv0;
 pub(crate) mod tari;

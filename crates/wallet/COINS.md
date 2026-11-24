@@ -16,7 +16,7 @@ Run `forager-wallet list` for the live table — this file documents it, and a t
 | Taproot | bech32m, witness v1, BIP340/341/350 key-path | secp256k1 |
 | SegWit v0 | bech32, witness v0 P2WPKH (Groestlcoin: legacy form and WIF under a double-Groestl-512 base58check) | secp256k1 |
 | P2PKH | base58check(version ‖ HASH160(pubkey)) | secp256k1 |
-| Ethereum | EIP-55 checksummed keccak160 of the uncompressed pubkey | secp256k1 |
+| Ethereum | EIP-55 checksummed keccak160 of the uncompressed pubkey (Quai: only Cyprus1, Quai-ledger addresses) | secp256k1 |
 | CryptoNote | dual spend/view keys, varint network prefix, 25-word seed | ed25519 |
 | Kaspa-family | CashAddr-style `<prefix>:<payload><8-char checksum>`, x-only pubkey, no tweak | secp256k1 |
 | Ergo P2PK | base58(prefix ‖ compressed pubkey ‖ Blake2b256[..4]) | secp256k1 |
@@ -100,6 +100,7 @@ may carry exactly one of two markers, and a marker is the only way a row can cla
 | `ethw` | EthereumPoW | Ethereum | `0x…` | — |
 | `octa` | OctaSpace | Ethereum | `0x…` | — |
 | `plx` | Parallax | Ethereum | `0x…` | — |
+| `quai` | Quai | Ethereum | `0x00…` | `m/44'/994'` |
 | `cfx` | Conflux | Conflux Core Space (CIP-37) | `cfx:aa…` | — |
 | `xmr` | Monero | CryptoNote | `4…` | — |
 | `zeph` | Zephyr | CryptoNote | `ZEPHYR…` | — |
@@ -233,6 +234,23 @@ These rows need a word of explanation:
   two keys, and a recent coinbase payee (`Fr5m2irs…`, block 6355250) decodes under the row's
   version byte and checksum. **Not checked:** an import into a Groestlcoin wallet and a pool
   payout.
+- **`quai`** — Quai. The key and the address are Ethereum's (EIP-55 over `Keccak256(pubkey)[12..]`),
+  but Quai reads the first two address bytes as routing: byte 0 is the shard (`0x00` is Cyprus1)
+  and the top bit of byte 1 selects the ledger (clear for Quai, set for Qi). A Cyprus1 Quai pool
+  pays only an address with first byte `0x00` and second byte below `0x80`, about one key in 512,
+  so `new` redraws random keys until one qualifies and prints its `0x`-hex private key, the form
+  Pelagus imports. `restore` of a key outside that scope is an error that names the address, not
+  an address. `new --hd` follows quais.js `getNextAddress(account, Zone.Cyprus1)`: it derives at
+  `m/44'/994'/<account>'/0/<index>` from `--index` (default 0) upwards and prints the first index
+  that qualifies, which a Quai HD wallet reaches the same way. Ethereum's key `0000…0001` mints
+  `0x7E5F…`, outside every Quai zone, so in the table this row is minted from the quais.js vector
+  key at index 139 of the 12-word `abandon … about` phrase. Detection reports the Ethereum family.
+  Sources: `dominant-strategies/go-quai@6561a9f8` (GPL-3.0; nothing taken but the two rules)
+  `common/address.go`; quais.js `@87e02f08` (MIT) `src/wallet/bip44/bip44.ts`,
+  `src/wallet/utils.ts`, `src/wallet/quai-hdwallet.ts`, `src/constants/zones.ts`. The known-answer
+  vectors are quais.js's own output (indices 139 and 918, and the index-139 private key), and two
+  coinbase addresses of Cyprus1 block 6070247 are checked against the scope rule. **Not checked:**
+  an import into Pelagus and a pool payout.
 - **`firo`** — one of the two `(most keys)` rows. Version byte `0x52` puts the 25-byte payload
   astride the base58 boundary between digit 32 (`Z`) and digit 33 (`a`): the interval the payload
   can occupy lies 1.222% below that boundary and 98.778% above it, so 98.8% of keys render `a…` and
@@ -399,6 +417,7 @@ token's `--legacy` form and its WIF inherit the same assumption.
 --coin xelis:
 --coin tari:
 --coin groestlcoin:
+--coin quai:
 ```
 
 Integers are decimal or `0x`-prefixed hex. An unrecognised parameter is rejected rather than

@@ -239,6 +239,8 @@ fn declares_testnet(params: &coins::FamilyParams) -> bool {
         | coins::FamilyParams::Nock
         // Tari: only the mainnet network byte is modelled.
         | coins::FamilyParams::Tari
+        // Quai, like Ethereum, has one address form on every network.
+        | coins::FamilyParams::Quai
         | coins::FamilyParams::Ethereum => false,
     }
 }

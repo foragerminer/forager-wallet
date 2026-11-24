@@ -288,6 +288,22 @@ fn cmd_new(coin: &str, net: Network, legacy: bool, testnet: bool) -> Result<(), 
             "The entropy hex re-derives the address with `restore`; no Tari wallet imports it."
         );
     }
+    if crate::resolve_spec(coin).is_ok_and(|s| matches!(s.params, crate::coins::FamilyParams::Quai))
+    {
+        println!();
+        println!(
+            "This is a Quai address in the Cyprus1 zone and the Quai ledger (first byte 0x00,"
+        );
+        println!("second byte below 0x80), the scope a Cyprus1 pool pays. About one key in 512");
+        println!(
+            "qualifies, so this key was redrawn until one did. Pelagus imports the 0x-hex key"
+        );
+        println!(
+            "(\"Import private key\"). Before mining, import it there and confirm the address."
+        );
+        println!("`new --hd --coin quai` instead prints a BIP39 phrase and the path index Quai");
+        println!("wallets reach, as `getNextAddress` does.");
+    }
     if crate::resolve_spec(coin).map(|s| s.family()) == Ok(Family::Xelis) {
         println!();
         println!("The raw key is the Xelis private key (a little-endian curve25519 scalar), not");
@@ -614,6 +630,17 @@ mod tests {
         let seed = "d008285e7bbc3fc1374e12978cbb5a434a5e9e8129e26b883761f6ec6f2b385a";
         assert!(run(&argv(&["restore", seed, "--coin", "quan"])).is_ok());
         assert!(run(&argv(&["restore", "not-hex", "--coin", "quan"])).is_err());
+    }
+
+    #[test]
+    fn new_and_restore_quai() {
+        assert!(run(&argv(&["new", "--coin", "quai"])).is_ok());
+        let key = crate::families::quai::tests::VECTOR_KEY;
+        assert!(run(&argv(&["restore", key, "--coin", "quai"])).is_ok());
+        // Out of Cyprus1: refused, not printed.
+        let one = "0000000000000000000000000000000000000000000000000000000000000001";
+        assert!(run(&argv(&["restore", one, "--coin", "quai"])).is_err());
+        assert!(run(&argv(&["new", "--hd", "--coin", "quai"])).is_ok());
     }
 
     #[test]

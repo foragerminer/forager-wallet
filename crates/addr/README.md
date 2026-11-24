@@ -19,7 +19,8 @@ Families: Taproot (bech32m), SegWit v0 (bech32), P2PKH (base58check), Ethereum (
 CryptoNote, Kaspa-family (CashAddr), Ergo, Alephium, XDAG, Warthog, Epic Cash epicbox, Conflux Core
 Space (CIP-37), Parano1d (bech32m `o1…`), Quantus (SS58 `qz…`), Nockchain (plain base58 of a
 Tip5 digest), Xelis (bech32 with a `:` separator, `xel:…`) and Tari (a base58 dual address,
-`12…`/`14…`), across 65 coins. Groestlcoin is classified as SegWit v0 and P2PKH: its bech32
+`12…`/`14…`), across 66 coins. A Quai address is classified as Ethereum, which it is byte for
+byte; its zone and ledger rule is a generation rule (`coins::quai_payout_scope`). Groestlcoin is classified as SegWit v0 and P2PKH: its bech32
 address is Bitcoin's construction, and its base58 address is P2PKH under a double-Groestl-512
 checksum.
 

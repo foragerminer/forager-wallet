@@ -118,7 +118,9 @@ pub fn native_purpose(coin: &CoinSpec) -> Option<Purpose> {
     match coin.params {
         FamilyParams::SegwitV0 { .. } | FamilyParams::Groestlcoin => Some(Purpose::Bip84),
         FamilyParams::Taproot { .. } => Some(Purpose::Bip86),
-        FamilyParams::P2pkh { .. } | FamilyParams::Ethereum => Some(Purpose::Bip44),
+        FamilyParams::P2pkh { .. } | FamilyParams::Ethereum | FamilyParams::Quai => {
+            Some(Purpose::Bip44)
+        }
         _ => None,
     }
 }
@@ -135,7 +137,7 @@ pub fn supports(coin: &CoinSpec, purpose: Purpose) -> bool {
         Purpose::Bip44 => {
             matches!(
                 coin.params,
-                FamilyParams::Ethereum | FamilyParams::Groestlcoin
+                FamilyParams::Ethereum | FamilyParams::Groestlcoin | FamilyParams::Quai
             ) || coin.params.p2pkh_parts().is_some()
         }
         // Groestlcoin has BIP44 and BIP84 forms only: its Taproot path is not offered.
@@ -350,6 +352,9 @@ pub fn derive(
     // `bip39::seed` validates the phrase first, so a typo surfaces as a specific error instead of
     // as a well-formed seed for a wallet the user does not own. Its `Seed` zeroizes on drop.
     let seed = bip39::seed(phrase, passphrase).map_err(HdError::InvalidMnemonic)?;
+    if matches!(coin.params, FamilyParams::Quai) {
+        return derive_quai(&seed, coin, account, index);
+    }
     let path_str = format!("m/{}'/{slip44}'/{account}'/0/{index}", purpose.number());
     let path: DerivationPath = path_str.parse().map_err(|_| HdError::Derivation)?;
     // The seam into `bip32`: BIP39 is this crate's own; CKDpriv is `bip32`'s. `bip32` 0.6 takes the
@@ -426,6 +431,49 @@ pub fn derive(
     })
 }
 
+/// Quai's HD derivation: the first index at or after `start` under `m/44'/994'/<account>'/0` whose
+/// address is in Cyprus1 and the Quai ledger, as quais.js's `deriveNextAddressNode` steps it
+/// (`QuaiHDWallet.getNextAddress(account, Zone.Cyprus1)`, `src/wallet/bip44/bip44.ts@87e02f08`).
+/// The printed path carries the index actually used, which a Quai wallet needs to find the address.
+/// Indices stay non-hardened, so the search ends at `2^31 - 1`.
+fn derive_quai(
+    seed: &bip39::Seed,
+    coin: &CoinSpec,
+    account: u32,
+    start: u32,
+) -> Result<HdAccount, HdError> {
+    let slip44 = coin
+        .hd_slip44
+        .ok_or_else(|| HdError::UnknownCoin(coin.ticker.to_string()))?;
+    let parent: DerivationPath = format!("m/44'/{slip44}'/{account}'/0")
+        .parse()
+        .map_err(|_| HdError::Derivation)?;
+    let change =
+        XPrv::derive_from_path(seed.as_bytes(), &parent).map_err(|_| HdError::Derivation)?;
+    for index in start..0x8000_0000 {
+        let child = bip32::ChildNumber::new(index, false).map_err(|_| HdError::Derivation)?;
+        let xprv = change
+            .derive_child(child)
+            .map_err(|_| HdError::Derivation)?;
+        let mut priv32: [u8; 32] = PrivateKey::to_bytes(xprv.private_key());
+        let d = secp256k1::scalar_in_range(&priv32).map_err(|_| HdError::Derivation)?;
+        if let Ok(address) = families::quai::address(&d) {
+            let secret = SecretStd::EthHex(secret::eth_hex(&priv32));
+            priv32.zeroize();
+            return Ok(HdAccount {
+                symbol: coin.ticker,
+                name: coin.name,
+                purpose: Purpose::Bip44,
+                path: format!("m/44'/{slip44}'/{account}'/0/{index}"),
+                address,
+                secret,
+            });
+        }
+        priv32.zeroize();
+    }
+    Err(HdError::Derivation)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -454,7 +502,7 @@ mod tests {
             [
                 "btc", "ltc", "vtc", "kcn", "rin", "grs", "doge", "rvn", "firo", "mewc", "xvg",
                 "zny", "ytn", "avn", "lcc", "ftc", "btx", "dnr", "scc", "grlc", "etc", "eth",
-                "ubq", "zec", "btg", "kmd", "btcz", "zer", "yec", "zcl", "ltz"
+                "ubq", "quai", "zec", "btg", "kmd", "btcz", "zer", "yec", "zcl", "ltz"
             ]
         );
         for c in supported() {

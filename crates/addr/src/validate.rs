@@ -897,6 +897,10 @@ mod tests {
             // Parallax: miner of blocks 65722-65726, explorer.parallaxprotocol.org. Mixed case, so
             // the EIP-55 checksum is verified.
             ("plx", "0x38432a328b3c6f15582292f7235F17b08A98C6AB", "parallax 65726"),
+            // Quai: the primary coinbase of Cyprus1 zone block 6070247 (`woHeader`) and of one of
+            // its workshares, read with `quai_getBlockByNumber` from rpc.quai.network/cyprus1.
+            ("quai", "0x0011d16c5f4801D8d7B2eD4A84fC98D114Cb85b8", "cyprus1 6070247"),
+            ("quai", "0x00796637A22A9f4Eca22DB25aE3e170b07A7aA6F", "cyprus1 6070247 ws"),
             // Groestlcoin: coinbase payee of blocks 6355180-6355250 (every tenth block read),
             // groestlsight.groestlcoin.org/api. The checksum is double Groestl-512.
             ("grs", "Fr5m2irs9vNWSAFXJK6KPtxqW9YWg384FX", "groestlsight 6355250"),
@@ -955,6 +959,14 @@ mod tests {
                 }
                 FamilyParams::Ethereum => {
                     assert_eq!(detected, Some(Family::Ethereum), "{ticker} {addr}");
+                }
+                FamilyParams::Quai => {
+                    assert_eq!(detected, Some(Family::Ethereum), "{ticker} {addr}");
+                    let bytes: [u8; 20] = crate::hexbytes::decode_n(&addr[2..]).unwrap();
+                    assert!(
+                        crate::coins::quai_payout_scope(&bytes),
+                        "{ticker} {addr} ({src}): not Cyprus1 / Quai ledger"
+                    );
                 }
                 FamilyParams::Groestlcoin => {
                     assert_eq!(base58::decode_check(addr), None, "{ticker} {addr}: SHA256d");

@@ -23,7 +23,8 @@ pub enum Family {
     /// Bitcoin-style Taproot P2TR (bech32m key-path only, BIP340/341/350).
     Taproot,
     /// Ethereum-family: EIP-55 checksummed `0x`-prefixed 20-byte address derived from the
-    /// uncompressed pubkey via keccak256.
+    /// uncompressed pubkey via keccak256. Quai ([`FamilyParams::Quai`]) is in this family: its
+    /// address is the same string, and only its shard and ledger rules differ.
     Ethereum,
     /// CryptoNote (Monero / XMR): curve25519 + dual spend/view keys.
     CryptoNote,
@@ -100,6 +101,22 @@ pub const GROESTLCOIN_WIF: u8 = 0x80;
 
 /// Groestlcoin's testnet WIF byte, 239: the same file, L269.
 pub const GROESTLCOIN_WIF_TESTNET: u8 = 0xef;
+
+/// The first byte of a Quai address in the Cyprus1 zone: region 0 in the high nibble, zone 0 in the
+/// low one. Source: `dominant-strategies/go-quai@6561a9f8` `common/address.go`
+/// (`AddressBytes.Location`), and quais.js `src/constants/zones.ts` (`Zone.Cyprus1 = '0x00'`).
+pub const QUAI_ZONE_CYPRUS1: u8 = 0x00;
+
+/// The second byte of a Quai-ledger address is at most this value; above it the address is in the
+/// Qi (UTXO) ledger. Source: the same `common/address.go`, `IsInQuaiLedgerScope` (`a[1] <= 127`).
+pub const QUAI_LEDGER_MAX_SECOND_BYTE: u8 = 0x7f;
+
+/// Whether a 20-byte Quai address can take a mining payout from this tool: Cyprus1 zone and the
+/// Quai ledger. Any other address is a valid Quai address in another shard or ledger, which a
+/// Cyprus1 pool cannot pay.
+pub fn quai_payout_scope(addr: &[u8; 20]) -> bool {
+    addr[0] == QUAI_ZONE_CYPRUS1 && addr[1] <= QUAI_LEDGER_MAX_SECOND_BYTE
+}
 
 /// Human-readable part of a mainnet Xelis address. Source: `xelis-project/xelis-blockchain@db59b5c2`
 /// `xelis_common/src/config.rs` (`PREFIX_ADDRESS`).
@@ -266,6 +283,12 @@ pub enum FamilyParams {
     /// them, and every `segwit:` token, assumes SHA256d. The bytes are the protocol constants
     /// `GROESTLCOIN_*` above. Its [`Family`] is [`Family::SegwitV0`].
     Groestlcoin,
+    /// Quai: Ethereum's key and address construction (EIP-55 over `Keccak256(pubkey)[12..]`), and
+    /// only an address in the Cyprus1 zone and the Quai ledger is minted ([`quai_payout_scope`]).
+    /// About one key in 512 qualifies, so generation grinds, and a key outside that scope is
+    /// refused rather than printed. A separate variant because an `Ethereum` row accepts every key.
+    /// Its [`Family`] is [`Family::Ethereum`]: the string is indistinguishable from one.
+    Quai,
 }
 
 impl FamilyParams {
@@ -277,7 +300,7 @@ impl FamilyParams {
             // Groestlcoin is SegWit v0 with its own base58check hash; see its variant.
             FamilyParams::SegwitV0 { .. } | FamilyParams::Groestlcoin => Family::SegwitV0,
             FamilyParams::Taproot { .. } => Family::Taproot,
-            FamilyParams::Ethereum => Family::Ethereum,
+            FamilyParams::Ethereum | FamilyParams::Quai => Family::Ethereum,
             FamilyParams::CryptoNote { .. } => Family::CryptoNote,
             FamilyParams::KaspaAddr { .. } => Family::KaspaAddr,
             FamilyParams::Ergo => Family::Ergo,
@@ -1046,6 +1069,20 @@ pub static COINS: &[CoinSpec] = &[
         hd_slip44: None,
         params: FamilyParams::Ethereum,
     },
+    // Quai (QUAI, KawPoW/SHA/Scrypt merged mining): Ethereum's address, `Keccak256(pubkey[1:])[12:]`
+    // with EIP-55 case, scoped by its first two bytes. Byte 0 is the location (Cyprus1 = 0x00) and
+    // bit 7 of byte 1 selects the ledger (clear = Quai, set = Qi). Source:
+    // dominant-strategies/go-quai@6561a9f89a027fb5b76fbe75ecf48ffe93c8370d common/address.go
+    // (`AddressBytes.Location`, `IsInQuaiLedgerScope`); quais.js@87e02f08 src/wallet/bip44/bip44.ts
+    // (`deriveNextAddressNode`), src/wallet/utils.ts (`isValidAddressForZone`) and
+    // src/wallet/quai-hdwallet.ts (`_coinType = 994`, parent path m/44'/994'). SLIP-44 994 "QUAI
+    // Quai Network" (969 is Qi).
+    CoinSpec {
+        ticker: "quai",
+        name: "Quai",
+        hd_slip44: Some(994),
+        params: FamilyParams::Quai,
+    },
     // ---- XDAG family ----
     // XDAG: modern account address = Base58Check(HASH160(compressed_pubkey)), no version byte.
     // Source: XDagger/xdagj (MIT) crypto/keys/AddressUtils.toBytesAddress +
@@ -1509,6 +1546,14 @@ pub static TOKEN_GRAMMAR: &[TokenSyntax] = &[
         caveat: None,
     },
     TokenSyntax {
+        family: "quai",
+        keys: &[],
+        flags: &[],
+        syntax: "quai:",
+        example: "quai:",
+        caveat: None,
+    },
+    TokenSyntax {
         family: "groestlcoin",
         keys: &[],
         flags: &[],
@@ -1647,6 +1692,7 @@ pub fn parse_token(token: &str) -> Result<CoinSpec, String> {
         "xelis" => FamilyParams::Xelis,
         "tari" => FamilyParams::Tari,
         "groestlcoin" => FamilyParams::Groestlcoin,
+        "quai" => FamilyParams::Quai,
         // Unreachable while `TOKEN_GRAMMAR` and this match list the same families — the lookup above
         // already rejected any name the grammar does not carry.  Report it instead of panicking, so a
         // grammar row added without an arm here degrades to a clear message; the
@@ -2029,7 +2075,7 @@ mod tests {
                 // Groestlcoin is SegWit v0 with its own base58check hash; see its variant.
                 FamilyParams::SegwitV0 { .. } | FamilyParams::Groestlcoin => Family::SegwitV0,
                 FamilyParams::Taproot { .. } => Family::Taproot,
-                FamilyParams::Ethereum => Family::Ethereum,
+                FamilyParams::Ethereum | FamilyParams::Quai => Family::Ethereum,
                 FamilyParams::CryptoNote { .. } => Family::CryptoNote,
                 FamilyParams::KaspaAddr { .. } => Family::KaspaAddr,
                 FamilyParams::Ergo => Family::Ergo,

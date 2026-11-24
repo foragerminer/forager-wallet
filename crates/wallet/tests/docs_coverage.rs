@@ -143,9 +143,15 @@ fn coin_table_rows(md: &str) -> Vec<Row> {
 ///
 /// A Tari secret is the 16-byte entropy of its seed, not a 32-byte key, so a Tari row mints from
 /// the low 16 bytes (the last 32 hex characters) of `secret`. Key 1 stays entropy 1.
+///
+/// A Quai row mints only a key whose address is in Cyprus1 and the Quai ledger, and key 1 is not
+/// one, so a Quai row mints from the quais.js vector key (`m/44'/994'/0'/0/139` of the 12-word
+/// `abandon … about` phrase) whatever `secret` is.
 fn mint(ticker: &str, secret: &str) -> String {
+    const QUAI_KEY: &str = "1fc6218883bef255c4a260ad754511db8ffa0fd9053c8ccfd7f9675682fc9233";
     let secret = match coins::lookup(ticker) {
         Some(s) if s.family() == Family::Tari => &secret[secret.len() - 32..],
+        Some(s) if matches!(s.params, coins::FamilyParams::Quai) => QUAI_KEY,
         _ => secret,
     };
     address_from_secret(ticker, secret, Network::Mainnet)
@@ -274,6 +280,9 @@ fn leading_characters(spec: &coins::CoinSpec) -> Leading {
         coins::FamilyParams::Conflux { hrp, .. } => Leading::Forced(format!("{hrp}:aa")),
         // EIP-55 renders a literal `0x` before the twenty checksummed hex bytes.
         coins::FamilyParams::Ethereum => Leading::Forced("0x".to_string()),
+        // Quai mints only Cyprus1 addresses, whose first byte is `0x00`, and digits carry no
+        // EIP-55 case, so `0x00` opens every address.
+        coins::FamilyParams::Quai => Leading::Forced(format!("0x{:02x}", coins::QUAI_ZONE_CYPRUS1)),
         // `base58check(version ‖ HASH160(pubkey))` = `base58(version ‖ 20 free bytes ‖ 4 checksum
         // bytes)`. The checksum is a function of the hash rather than free, so bracketing it as
         // free only widens the bracket — safe in the direction that matters, see

@@ -815,3 +815,21 @@ fn every_generated_groestlcoin_address_round_trips_through_detection() {
         }
     }
 }
+
+/// Every Quai address the generator emits is an Ethereum-family address to detection, with its
+/// EIP-55 case verified, and lies in Cyprus1 and the Quai ledger.
+#[test]
+fn every_generated_quai_address_round_trips_through_detection() {
+    for _ in 0..8 {
+        let w = forager_wallet::generate("quai", Network::Mainnet).unwrap();
+        assert!(w.address.starts_with("0x00"), "{}", w.address);
+        assert_eq!(detect_family(&w.address), Some(Family::Ethereum));
+        assert_eq!(check(&w.address, Family::Ethereum), Verdict::Ok);
+        let bytes: [u8; 20] = forager_addr::hexbytes::decode_n(&w.address[2..]).unwrap();
+        assert!(
+            forager_wallet::coins::quai_payout_scope(&bytes),
+            "{}",
+            w.address
+        );
+    }
+}

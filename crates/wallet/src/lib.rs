@@ -139,6 +139,9 @@ pub enum WalletError {
     BadMnemonic(String),
     /// A Tari secret was not 32 hex characters (the CipherSeed's 16 bytes of entropy).
     BadTariEntropy,
+    /// A valid secp256k1 key whose Quai address (carried) is outside the Cyprus1 zone or in the Qi
+    /// ledger, so a Cyprus1 Quai pool cannot pay it.
+    QuaiOutOfScope(String),
 }
 
 impl std::fmt::Display for WalletError {
@@ -157,6 +160,12 @@ impl std::fmt::Display for WalletError {
             }
             WalletError::BadCoinToken(m) => write!(f, "bad coin token: {m}"),
             WalletError::BadMnemonic(m) => write!(f, "invalid mnemonic: {m}"),
+            WalletError::QuaiOutOfScope(a) => write!(
+                f,
+                "this key's Quai address {a} is not a Cyprus1 Quai-ledger address (it needs first \
+                 byte 0x00 and second byte below 0x80), so a Quai pool cannot pay it. Generate a \
+                 key with `new --coin quai`, which only prints one that qualifies"
+            ),
             WalletError::BadTariEntropy => f.write_str(
                 "a Tari secret is the seed entropy, 32 hex characters (16 bytes); restore the \
                  24 words with --mnemonic",
@@ -334,7 +343,15 @@ pub fn generate(coin: &str, net: Network) -> Result<Wallet, WalletError> {
         let Ok(d) = curves::secp256k1::scalar_in_range(&buf) else {
             continue;
         };
-        return build_wallet(&spec, &d, &buf, net, false);
+        // A Quai key is redrawn until its address is in Cyprus1 and the Quai ledger, about one key
+        // in 512, as quais.js's `deriveNextAddressNode` steps the index until one is.
+        return match build_wallet(&spec, &d, &buf, net, false) {
+            Err(WalletError::QuaiOutOfScope(_)) => {
+                zeroize::Zeroize::zeroize(&mut buf);
+                continue;
+            }
+            w => w,
+        };
     }
 }
 
@@ -601,6 +618,12 @@ pub(crate) fn dispatch(
                 SecretStd::Wif(secret::wif(priv32, wif, compressed)),
                 *priv32,
             ));
+        }
+        // Quai: Ethereum's address and secret form, refused outside Cyprus1 / the Quai ledger.
+        // Network-agnostic like Ethereum.
+        coins::FamilyParams::Quai => {
+            let addr = families::quai::address(d).map_err(WalletError::QuaiOutOfScope)?;
+            return Ok((addr, SecretStd::EthHex(secret::eth_hex(priv32)), *priv32));
         }
         coins::FamilyParams::Ethereum => {
             // Ethereum addresses are network-agnostic at the derivation level.
@@ -1816,6 +1839,40 @@ mod tests {
             g.address
         );
         assert_eq!(detect_family(&g.address), Some(Family::Tari));
+    }
+
+    /// Quai through the public seam: the quais.js Cyprus1 key derives its address with an `0x` hex
+    /// secret, the `quai:` token agrees, Ethereum's private-key-1 address is refused by name, and
+    /// every generated key lands in Cyprus1 and the Quai ledger.
+    #[test]
+    fn quai_through_the_public_seam() {
+        use families::quai::tests::{VECTOR_ADDRESS, VECTOR_KEY};
+        let w = address_from_secret("quai", VECTOR_KEY, Network::Mainnet).unwrap();
+        assert_eq!(w.address, VECTOR_ADDRESS);
+        assert_eq!(w.secret_std, SecretStd::EthHex(format!("0x{VECTOR_KEY}")));
+        let t = address_from_secret("quai:", VECTOR_KEY, Network::Mainnet).unwrap();
+        assert_eq!(t.address, VECTOR_ADDRESS);
+        assert!(is_custom_token("quai:"));
+        assert_eq!(
+            address_from_secret("quai", PRIV1, Network::Mainnet).err(),
+            Some(WalletError::QuaiOutOfScope(
+                "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf".into()
+            ))
+        );
+        // `eth` keeps minting it: the scope is Quai's rule, not Ethereum's.
+        assert!(address_from_secret("eth", PRIV1, Network::Mainnet).is_ok());
+        for _ in 0..4 {
+            let g = generate("quai", Network::Mainnet).unwrap();
+            let bytes: [u8; 20] = hexbytes::decode_n(&g.address[2..]).unwrap();
+            assert!(coins::quai_payout_scope(&bytes), "{}", g.address);
+            assert_eq!(detect_family(&g.address), Some(Family::Ethereum));
+            assert_eq!(
+                address_from_secret("quai", &g.secret_hex, Network::Mainnet)
+                    .unwrap()
+                    .address,
+                g.address
+            );
+        }
     }
 
     /// Groestlcoin through the public seam: the `groestlcoinjs-lib` private-key-1 and

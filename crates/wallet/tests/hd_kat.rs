@@ -693,6 +693,27 @@ fn grs_bip84_and_bip44_vectors() {
     assert!(hd::derive(ABANDON, "", coin, hd::Purpose::Bip86, 0, 0).is_err());
 }
 
+/// Quai at SLIP-44 994, against quais.js@87e02f08 itself: `QuaiHDWallet.fromMnemonic` of the
+/// 12-word `abandon … about` phrase, `getNextAddress(0, Zone.Cyprus1)` twice. The first Cyprus1
+/// Quai-ledger address is index 139; the next one after it is index 918. Indices 0..139 all derive
+/// addresses outside that scope and are skipped, as `deriveNextAddressNode` skips them.
+#[test]
+fn quai_cyprus1_vectors_skip_to_the_first_in_scope_index() {
+    let coin = hd::lookup("quai").expect("quai is HD-capable");
+    let first = hd::derive(ABANDON_12, "", coin, hd::Purpose::Bip44, 0, 0).unwrap();
+    assert_eq!(first.path, "m/44'/994'/0'/0/139");
+    assert_eq!(first.address, "0x000B2E36297c1b133Ca1DCA9881Dc820018f1F79");
+    assert_eq!(
+        first.secret_str(),
+        "0x1fc6218883bef255c4a260ad754511db8ffa0fd9053c8ccfd7f9675682fc9233"
+    );
+    let same = hd::derive(ABANDON_12, "", coin, hd::Purpose::Bip44, 0, 139).unwrap();
+    assert_eq!(same.address, first.address);
+    let next = hd::derive(ABANDON_12, "", coin, hd::Purpose::Bip44, 0, 140).unwrap();
+    assert_eq!(next.path, "m/44'/994'/0'/0/918");
+    assert_eq!(next.address, "0x0057F8e659B16f7956249B87F09f57fF64847AbF");
+}
+
 // BIP86 — Taproot key-path at m/86'. The oracle's Taproot tweak was anchored against this crate's
 // own `KAT_PRL` / `KAT_TPRL` pearl vectors before these values were derived.
 #[test]
@@ -778,6 +799,7 @@ fn native_purpose_matches_single_key_address_type() {
         ("doge", hd::Purpose::Bip44),
         ("firo", hd::Purpose::Bip44),
         ("eth", hd::Purpose::Bip44),
+        ("quai", hd::Purpose::Bip44),
     ] {
         let coin = hd::lookup(sym).unwrap();
         assert_eq!(hd::native_purpose(coin), Some(want), "{sym}");
