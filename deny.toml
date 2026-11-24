@@ -68,6 +68,15 @@ allow = [
 confidence-threshold = 0.9
 # Both crates in this workspace are Apache-2.0, so first-party crates are checked too.
 private = { ignore = false }
+# `unicode-ident` is `(MIT OR Apache-2.0) AND Unicode-3.0`: its identifier tables are Unicode data.
+# It arrives only as a build-time dependency of `curve25519-dalek-derive`, the proc macro
+# `curve25519-dalek` (Xelis addresses) uses to select its SIMD backend, through `proc-macro2`,
+# `quote` and `syn`. Nothing from it is linked into either binary. The exception names the one
+# crate rather than adding `Unicode-3.0` to `allow`, so no other crate can enter under that license
+# without a decision of its own.
+exceptions = [
+    { crate = "unicode-ident", allow = ["Unicode-3.0"] },
+]
 
 [bans]
 # Surface (don't fail on) duplicate versions and wildcard deps as hygiene signal.

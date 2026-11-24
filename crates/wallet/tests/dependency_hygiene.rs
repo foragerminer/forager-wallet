@@ -29,6 +29,11 @@
 /// hash Quantus derives an account id with. Both are pure computation. Both are generation-side
 /// only: `forager-addr`, which the miner links, gains neither.
 ///
+/// `curve25519-dalek` (dalek-cryptography, BSD-3-Clause) is Ristretto255 and curve25519 scalar
+/// arithmetic, for Xelis addresses (`s^-1 * H`). It is declared with no default features, so it
+/// brings no hashing, no `alloc` and no precomputed tables. It is pure computation and
+/// generation-side only, like the two above.
+///
 /// `pbkdf2` was already in the tree transitively via `bip32`, at the same version and feature
 /// selection, so declaring it directly added no crate. `unicode-normalization` is genuinely new:
 /// it is a pure-Rust Unicode data table with no I/O, and hand-rolling NFKD would be strictly worse
@@ -52,6 +57,7 @@ const ALLOWED: &[&str] = &[
     "zeroize",
     "ml-dsa",
     "qp-poseidon-core",
+    "curve25519-dalek",
 ];
 
 /// Parse the crate's own `[dependencies]` section into a list of dependency names.

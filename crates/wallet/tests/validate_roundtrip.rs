@@ -475,6 +475,54 @@ fn every_generated_quantus_address_round_trips_through_detection() {
     }
 }
 
+/// Every Xelis address the generator emits round-trips through detection on both networks, and no
+/// single-character corruption of one does. The first key is the scalar 1 (little-endian), whose
+/// address `xelis-project/xelis-blockchain@db59b5c2` itself produces.
+#[test]
+fn every_generated_xelis_address_round_trips_through_detection() {
+    let one = "0100000000000000000000000000000000000000000000000000000000000000";
+    let w = forager_wallet::address_from_secret("xel", one, Network::Mainnet).unwrap();
+    assert_eq!(
+        w.address,
+        "xel:3jfypdzk48ndcewrw7ssfrt5t722prxm0azvhntmgme5qjy8zy6qqckgjqg"
+    );
+
+    for i in 1u32..=8 {
+        // Little-endian scalars 1..=8 in the low bytes, plus one with the top byte set.
+        let mut secret = format!("{i:02x}");
+        secret.push_str(&"00".repeat(30));
+        secret.push_str(if i == 8 { "0f" } else { "00" });
+        for net in [Network::Mainnet, Network::Testnet] {
+            let w = forager_wallet::address_from_secret("xel", &secret, net).unwrap();
+            let hrp = if net == Network::Mainnet {
+                "xel:"
+            } else {
+                "xet:"
+            };
+            assert!(w.address.starts_with(hrp), "key {secret}: {}", w.address);
+            assert_eq!(w.address.len(), 63);
+            assert_eq!(
+                detect_family(&w.address),
+                Some(Family::Xelis),
+                "{}",
+                w.address
+            );
+            assert_eq!(check(&w.address, Family::Xelis), Verdict::Ok);
+            for pos in 0..w.address.len() {
+                let mut bad = w.address.clone().into_bytes();
+                bad[pos] = if bad[pos] == b'q' { b'p' } else { b'q' };
+                let bad = String::from_utf8(bad).unwrap();
+                assert_ne!(
+                    detect_family(&bad),
+                    Some(Family::Xelis),
+                    "corruption at {pos} of {} still detected",
+                    w.address
+                );
+            }
+        }
+    }
+}
+
 /// Every KAD address the generator emits classifies as the form the live chain issues.
 ///
 /// Kadikama is the coin table's one row where the chain params and the network's practice

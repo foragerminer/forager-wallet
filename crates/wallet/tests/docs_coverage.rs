@@ -343,6 +343,13 @@ fn leading_characters(spec: &coins::CoinSpec) -> Leading {
         // account id (every sample in the KAT, and the published addresses, open `qz`).
         coins::FamilyParams::Quantus => Leading::Forced("qz".to_string()),
         coins::FamilyParams::Noid => Leading::Forced(format!("{}1", coins::NOID_HRP)),
+        // `bech32(hrp, ':', key ‖ 0x00)`: the HRP and the `:` separator, then the 5-bit groups of a
+        // compressed Ristretto255 key. Its first byte's top five bits are key-dependent (only the
+        // lowest bit of byte 0 and the top bit of byte 31 are fixed by the encoding), so `xel:` is
+        // all that is forced.
+        coins::FamilyParams::Xelis => {
+            Leading::Forced(format!("{}{}", coins::XELIS_HRP, coins::XELIS_SEPARATOR))
+        }
         // `base58check([0x01, 0x00] ‖ 02|03 ‖ key)`: the version bytes and the `02`/`03` lead fix
         // the top bytes, so the first two characters are always `es` (the fixed-fill brackets run
         // `esWJ`..`esaC`; epic-wallet documents mainnet as `es`).

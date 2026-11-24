@@ -109,7 +109,7 @@ pub enum Variant {
 /// constants, so `Bech32m` coming back from a witness-v0 address means the address is wrong, not
 /// that this function was lenient. Binding version to variant is again the caller's rule.
 pub fn verify(s: &str) -> Option<(String, Variant)> {
-    checked(s).map(|(hrp, variant, _)| (hrp, variant))
+    checked(s, '1').map(|(hrp, variant, _)| (hrp, variant))
 }
 
 /// Decode a bech32 / bech32m string whose data part is a plain byte string, with no witness
@@ -120,13 +120,21 @@ pub fn verify(s: &str) -> Option<(String, Variant)> {
 /// the layout a Parano1d `o1…` address uses (`bech32::encode::<Bech32m>(hrp, bytes)` in the
 /// reference). It is not the SegWit layout, whose first data character is a witness version.
 pub fn decode(s: &str) -> Option<(String, Variant, Vec<u8>)> {
-    let (hrp, variant, data) = checked(s)?;
+    decode_with_separator(s, '1')
+}
+
+/// [`decode`] for a string that puts `sep` between the HRP and the data part instead of BIP173's
+/// `1`. The checksum, charset, case and padding rules are unchanged; only the separator differs.
+/// A Xelis address is the one user: classic bech32 behind a `:` (`xel:…`).
+pub fn decode_with_separator(s: &str, sep: char) -> Option<(String, Variant, Vec<u8>)> {
+    let (hrp, variant, data) = checked(s, sep)?;
     let bytes = convertbits_5_to_8(&data)?;
     Some((hrp, variant, bytes))
 }
 
 /// [`verify`], also returning the 5-bit data part with the six checksum characters removed.
-fn checked(s: &str) -> Option<(String, Variant, Vec<u8>)> {
+/// `sep` is the separator to split on, `1` for every BIP173 string.
+fn checked(s: &str, sep: char) -> Option<(String, Variant, Vec<u8>)> {
     // Mixed case is invalid per BIP173 "Uppercase/lowercase": "Decoders MUST NOT accept strings
     // where some characters are uppercase and some are lowercase".
     let has_upper = s.bytes().any(|b| b.is_ascii_uppercase());
@@ -143,7 +151,7 @@ fn checked(s: &str) -> Option<(String, Variant, Vec<u8>)> {
     if lower.len() > 90 {
         return None;
     }
-    let sep = lower.rfind('1')?;
+    let sep = lower.rfind(sep)?;
     // Non-empty HRP and a 6-char checksum minimum after the separator.
     if sep == 0 || sep + 7 > lower.len() {
         return None;
@@ -185,17 +193,26 @@ pub fn encode(hrp: &str, witver: u8, program: &[u8]) -> String {
     };
     let mut data = vec![witver];
     data.extend(convertbits_8_to_5(program));
-    encode_data(hrp, &data, xor_const)
+    encode_data(hrp, '1', &data, xor_const)
 }
 
 /// Encode a plain byte string as bech32m under `hrp`, with no witness version: the inverse of
 /// [`decode`] for a [`Variant::Bech32m`] string.
 pub fn encode_bech32m_bytes(hrp: &str, bytes: &[u8]) -> String {
-    encode_data(hrp, &convertbits_8_to_5(bytes), BECH32M_CONST)
+    encode_data(hrp, '1', &convertbits_8_to_5(bytes), BECH32M_CONST)
 }
 
-/// `hrp ‖ '1' ‖ data ‖ checksum`, with the checksum constant chosen by the caller.
-fn encode_data(hrp: &str, data: &[u8], xor_const: u32) -> String {
+/// Encode a plain byte string as classic bech32 (checksum constant 1, not bech32m) under `hrp`,
+/// with `sep` between the HRP and the data: the inverse of [`decode_with_separator`] for a
+/// [`Variant::Bech32`] string. A Xelis address is `encode_bech32_bytes_with_separator("xel", ':',
+/// key ‖ type)`.
+pub fn encode_bech32_bytes_with_separator(hrp: &str, sep: char, bytes: &[u8]) -> String {
+    encode_data(hrp, sep, &convertbits_8_to_5(bytes), BECH32_CONST)
+}
+
+/// `hrp ‖ sep ‖ data ‖ checksum`, with the separator and the checksum constant chosen by the
+/// caller. The separator is not part of the checksum: BIP173 checksums the HRP and the data only.
+fn encode_data(hrp: &str, sep: char, data: &[u8], xor_const: u32) -> String {
     let mut values = hrp_expand(hrp);
     values.extend_from_slice(data);
     values.extend_from_slice(&[0, 0, 0, 0, 0, 0]);
@@ -206,7 +223,7 @@ fn encode_data(hrp: &str, data: &[u8], xor_const: u32) -> String {
 
     let mut s = String::with_capacity(hrp.len() + 1 + data.len() + 6);
     s.push_str(hrp);
-    s.push('1');
+    s.push(sep);
     for &d in data.iter().chain(checksum.iter()) {
         s.push(CHARSET[d as usize] as char);
     }
