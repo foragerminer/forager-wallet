@@ -45,7 +45,7 @@ two ends agree on the characters written here; if they do, everything between th
 may carry exactly one of two markers, and a marker is the only way a row can claim less:
 
 - **`(most keys)`** — the prefix is known *not* to hold for every key. The test holds a private key
-  that mints something else and fails if it stops doing so. `firo` is the table's only such row.
+  that mints something else and fails if it stops doing so. `firo` and `ftc` are the only such rows.
 - **`(sampled)`** — no argument in the test decides the row either way, so the prefix is swept over
   1024 distinct keys, which can refute it but can never establish it. No row currently needs this
   marker; it exists so that a future one cannot pass by saying nothing.
@@ -58,26 +58,51 @@ may carry exactly one of two markers, and a marker is the only way a row can cla
 | `vtc` | Vertcoin | SegWit v0 | `vtc1q…` | `m/84'/28'` |
 | `scash` | Scash | SegWit v0 | `bc1q…` | — |
 | `alpha` | Unicity Alpha | SegWit v0 | `alpha1q…` | — |
+| `qtc` | Qubitcoin | SegWit v0 | `bc1q…` | — |
+| `kcn` | Kylacoin | SegWit v0 | `kc1q…` | `m/84'/942'` |
+| `rin` | Rincoin | SegWit v0 | `rin1q…` | `m/84'/9555'` |
+| `lpepe` | LuckyPepe | SegWit v0 | `lpep1q…` | — |
 | `doge` | Dogecoin | P2PKH | `D…` | `m/44'/3'` |
 | `rvn` | Ravencoin | P2PKH | `R…` | `m/44'/175'` |
 | `firo` | Firo | P2PKH | `a…` (most keys) | `m/44'/136'` |
 | `mewc` | Meowcoin | P2PKH | `M…` | `m/44'/1669'` |
 | `evr` | Evrmore | P2PKH | `E…` | — |
 | `kad` | Kadikama | P2PKH | `K…` | — |
+| `tls` | Telestai | P2PKH | `T…` | — |
+| `rtm` | Raptoreum | P2PKH | `R…` | — |
+| `xvg` | Verge | P2PKH | `D…` | `m/44'/77'` |
+| `vrsc` | Verus | P2PKH | `R…` | — |
+| `zny` | BitZeny | P2PKH | `Z…` | `m/44'/123'` |
+| `ytn` | Yenten | P2PKH | `Y…` | `m/44'/9981'` |
+| `avn` | Avian | P2PKH | `R…` | `m/44'/921'` |
+| `lcc` | Litecoin Cash | P2PKH | `C…` | `m/44'/192'` |
+| `ftc` | Feathercoin | P2PKH | `6…` (most keys) | `m/44'/8'` |
+| `btx` | Bitcore | P2PKH | `2…` | `m/44'/160'` |
+| `dnr` | Denarius | P2PKH | `D…` | `m/44'/116'` |
+| `scc` | StakeCubeCoin | P2PKH | `s…` | `m/44'/522'` |
+| `grlc` | Garlicoin | P2PKH | `G…` | `m/44'/69420'` |
+| `xmg` | Magi | P2PKH | `9…` | — |
+| `xbtx` | Bitcoin Subsidium | P2PKH | `R…` | — |
 | `zec` | Zcash (transparent) | P2PKH | `t1…` | `m/44'/133'` |
 | `btg` | Bitcoin Gold | P2PKH | `G…` | `m/44'/156'` |
 | `kmd` | Komodo | P2PKH | `R…` | `m/44'/141'` |
 | `btcz` | BitcoinZ | P2PKH | `t1…` | `m/44'/177'` |
 | `zer` | Zero | P2PKH | `t1…` | `m/44'/323'` |
+| `yec` | Ycash | P2PKH | `s1…` | `m/44'/347'` |
+| `zcl` | Zclassic | P2PKH | `t1…` | `m/44'/147'` |
+| `glink` | Gemlink | P2PKH | `s1…` | — |
+| `ltz` | LitecoinZ | P2PKH | `L1…` | `m/44'/221'` |
 | `eth` | Ethereum | Ethereum | `0x…` | `m/44'/60'` |
 | `etc` | Ethereum Classic | Ethereum | `0x…` | `m/44'/61'` |
 | `ubq` | Ubiq | Ethereum | `0x…` | `m/44'/108'` |
 | `ethw` | EthereumPoW | Ethereum | `0x…` | — |
 | `octa` | OctaSpace | Ethereum | `0x…` | — |
+| `plx` | Parallax | Ethereum | `0x…` | — |
 | `cfx` | Conflux | Conflux Core Space (CIP-37) | `cfx:aa…` | — |
 | `xmr` | Monero | CryptoNote | `4…` | — |
 | `zeph` | Zephyr | CryptoNote | `ZEPHYR…` | — |
 | `sal` | Salvium | CryptoNote | `SaLv…` | — |
+| `opca` | Opacra | CryptoNote | `Pa…` | — |
 | `kas` | Kaspa | Kaspa-family | `kaspa:…` | — |
 | `kls` | Karlsen | Kaspa-family | `karlsen:…` | — |
 | `spr` | Spectre | Kaspa-family | `spectre:…` | — |
@@ -91,7 +116,7 @@ may carry exactly one of two markers, and a marker is the only way a row can cla
 | `nock` | Nockchain | Nockchain | no fixed prefix | — |
 | `xel` | Xelis | Xelis | `xel:…` | — |
 
-Seven rows need a word of explanation:
+These rows need a word of explanation:
 
 - **`scash`** — `bc1q…` is not a typo. Scash left Bitcoin's base58 and bech32 parameters unchanged,
   so a Scash address is byte-identical to the Bitcoin address for the same key, and no encoding can
@@ -170,16 +195,20 @@ Seven rows need a word of explanation:
   `bech32.rs`, `elgamal/key.rs`, `proofs/mod.rs` and `xelis_common/src/config.rs`. The known-answer
   vectors (four keys, both networks) were produced by running that code. **Not checked:** a restore
   in the official wallet and a pool payout.
-- **`firo`** — the table's only `(most keys)` row. Version byte `0x52` puts the 25-byte payload
+- **`firo`** — one of the two `(most keys)` rows. Version byte `0x52` puts the 25-byte payload
   astride the base58 boundary between digit 32 (`Z`) and digit 33 (`a`): the interval the payload
   can occupy lies 1.222% below that boundary and 98.778% above it, so 98.8% of keys render `a…` and
   1.2% render `Z…`. `restore 0000…003e --coin firo` mints `ZzzAu2nHnHNxMea5vbLyeD4nejtXDW57wY`, and
   `0x3e` = 62 is the *smallest* private key that does — every key from 1 to 61 renders `a…`, which
-  is why minting from `0000…0001` alone never showed this. Both forms are ordinary Firo addresses,
-  and every other base58 row's version bytes do pin the leading characters for every possible key.
+  is why minting from `0000…0001` alone never showed this. Both forms are ordinary Firo addresses.
+- **`ftc`** — the other `(most keys)` row. Version byte `0x0e` puts the payload astride the base58
+  boundary between `6` and `7`: about 91.1% of keys render `6…` and 8.9% render `7…`.
+  `restore 0000…0012 --coin ftc` mints `71hVNf2AEEEgM1RPzGVnRDr2eF6DpC4VPe`. Both forms are ordinary
+  Feathercoin addresses. Every other base58 row's version bytes pin the leading characters for
+  every possible key.
 
 **Testnet.** `--testnet` works where the coin defines one. `--legacy` renders the base58 form for a
-SegWit-default coin (`btc`, `ltc`, `vtc`, `scash`, `alpha`).
+SegWit-default coin (`btc`, `ltc`, `vtc`, `qtc`, `kcn`, `rin`, `lpepe`, `scash`, `alpha`).
 
 **Evrmore has no SLIP-44 coin type, so it has no `--hd` path.** Evrmore is a Ravencoin fork that
 changed only the address version byte (33, rendering `E…`) and kept Ravencoin's WIF byte. SLIP-44
@@ -200,6 +229,32 @@ as P2PKH, because the `K…` form is what the network issues: Kadikama's own sit
 "K-addresses" as a defining property of the chain, and every miner address on the official pool
 decodes to version 45. Generate the form a pool will credit. This tool does not produce `kad1…`,
 and `forager-addr` reports one as unrecognized rather than guessing.
+
+**Some rows share another coin's address bytes.** A chain that copied its parent's version and WIF
+bytes mints the same address for the same key, and no encoding can tell the two apart:
+
+- `qtc` and `scash` are Bitcoin's (`bc1q…` and `1…`).
+- `rtm`, `avn` and `xbtx` are Ravencoin's (`R…`, WIF `0x80`).
+- `vrsc`, and `rin --legacy`, are Komodo's (`R…`, WIF `0xbc`).
+- `xvg` and `dnr` are Dogecoin's (`D…`, WIF `0x9e`).
+- `zcl` is Zcash's, BitcoinZ's and Zero's (`t1…`).
+- `yec` and `glink` are each other's (`s1…`).
+- `lpepe --legacy` is Litecoin's (`L…`, WIF `0xb0`).
+
+The address is valid on both chains, and only the chain you send on decides which one pays. Check
+which chain you are paying before you paste one. `forager-addr` reports the family, never the coin.
+
+**Several rows run SegWit but pay out in base58.** Feathercoin (`ftc`), Bitcore (`btx`), Garlicoin
+(`grlc`), Yenten (`ytn`), Avian (`avn`), Litecoin Cash (`lcc`), LitecoinZ (`ltz`) and Verge (`xvg`)
+each set a `bech32_hrp` in their chain parameters, but every coinbase and pool payout found on their
+chains is the base58 form. These rows are P2PKH for the reason given for Kadikama above. Kylacoin
+(`kcn`) and Rincoin (`rin`) pay out in both forms, and Qubitcoin (`qtc`) and LuckyPepe (`lpepe`)
+mostly in bech32, so those four are SegWit v0 rows with a `--legacy` form.
+
+**Two SLIP-44 numbers are left out on purpose.** SLIP-44 registers Raptoreum as 10226, but
+Raptoreum Core derives at coin type 200, so `rtm` has no `--hd` path: neither number restores in
+both places. Gemlink's source sets coin type 407, which SLIP-44 registers to HDDCash, so `glink`
+has none either.
 
 ## HD purposes
 

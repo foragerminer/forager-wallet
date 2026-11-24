@@ -18,7 +18,7 @@ assert!(matches!(check("not-an-address", Family::P2pkh), Verdict::Unrecognized))
 Families: Taproot (bech32m), SegWit v0 (bech32), P2PKH (base58check), Ethereum (EIP-55),
 CryptoNote, Kaspa-family (CashAddr), Ergo, Alephium, XDAG, Warthog, Epic Cash epicbox, Conflux Core
 Space (CIP-37), Parano1d (bech32m `o1…`), Quantus (SS58 `qz…`), Nockchain (plain base58 of a
-Tip5 digest) and Xelis (bech32 with a `:` separator, `xel:…`), across 38 coins.
+Tip5 digest) and Xelis (bech32 with a `:` separator, `xel:…`), across 63 coins.
 
 Classification verifies a checksum wherever the scheme has one: base58check's double-SHA256,
 bech32/bech32m's polymod, CashAddr's polymod, Ergo's Blake2b-256, CryptoNote's Keccak-256, and

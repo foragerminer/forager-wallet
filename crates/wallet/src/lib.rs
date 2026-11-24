@@ -1079,6 +1079,204 @@ mod tests {
         }
     }
 
+    /// Mainnet address and WIF for privkey=1, for every base58 P2PKH row added from the coin's own
+    /// chain parameters (each row in `coins.rs` cites the repository, commit, file and lines).
+    ///
+    /// Expected values come from an independent from-scratch Python oracle (secp256k1, HASH160,
+    /// base58check, WIF), not from this crate. Before it was trusted with these rows, the same run
+    /// reproduced BTC `1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH` /
+    /// `KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn`, the Zcash-family
+    /// `t1UYsZVJkLPeMjxEtACvSxfWuNmddpWfxzs`, and the `btc` BIP44 vector in `tests/hd_kat.rs`.
+    ///
+    /// Several rows deliberately repeat another coin's bytes, and the repeated strings are the
+    /// check that they do: `rtm`, `avn` and `xbtx` are Ravencoin's (0x3c, 0x80), `vrsc` is
+    /// Komodo's (0x3c, 0xbc), `xvg` and `dnr` are Dogecoin's (0x1e, 0x9e), `zcl` is Zcash's and
+    /// `glink` is Ycash's. A row that carries the same bytes as another mints the same address for
+    /// the same key; detection reports the family, never the coin.
+    ///
+    /// What ties each row to its chain is not this test but `forager-addr`'s
+    /// `live_chain_addresses_decode_under_their_coin_rows`, which decodes addresses the networks
+    /// issued under the same rows.
+    #[test]
+    fn source_verified_p2pkh_rows_privkey_one() {
+        for (ticker, address, wif) in [
+            (
+                "tls",
+                "Tjz5YKZdDySb7vPhqU6Mq8NufQSowbLGS9",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+            ),
+            (
+                "rtm",
+                "RKxTdfmtxtfLDKZBgx6SvNkBtNu9jRYnLh",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+            ),
+            (
+                "xvg",
+                "DFpN6QqFfUm3gKNaxN6tNcab1FArL9cZLE",
+                "QNcdLVw8fHkixm6NNyN6nVwxKek4u7qrioRbQmjxac5TVoTtZuot",
+            ),
+            (
+                "vrsc",
+                "RKxTdfmtxtfLDKZBgx6SvNkBtNu9jRYnLh",
+                "Up1YVLk7uuErCHVQyFCtfinZngmdwfyfc47WCQ8oJxgowjVzNeqs",
+            ),
+            (
+                "zny",
+                "Zn48Jx2wsgPjPRV1Cm6971Ti6yJxgCpKbb",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+            ),
+            (
+                "ytn",
+                "Ya3KMd95k916w84k8W6BedeMDTY8YNzwWo",
+                "KCKZKrKeXuguredV2KYqvQducSiEgUMR2Ld2pscePrhYeDYFHX5t",
+            ),
+            (
+                "avn",
+                "RKxTdfmtxtfLDKZBgx6SvNkBtNu9jRYnLh",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+            ),
+            (
+                "lcc",
+                "CT9A8CEgF7qJ3T6QuXSFQN31kEexxxa2oX",
+                "T33ydQRKp4FCW5LCLLUB7deioUMoveiwekdwUwyfRDeGZm76aUjV",
+            ),
+            (
+                "ftc",
+                "6pQiLg4eJbM2bP9CZemnccDzwB3kz2Ae1x",
+                "N1LYBvAjrq6XNUt5Xm3p3iSALhXdYRWE7jTWTWCSix24zWLX171A",
+            ),
+            (
+                "btx",
+                "2Ph5WUnUVcFPbccFJ37HHEEM1dDP8UVadZ",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+            ),
+            (
+                "dnr",
+                "DFpN6QqFfUm3gKNaxN6tNcab1FArL9cZLE",
+                "QNcdLVw8fHkixm6NNyN6nVwxKek4u7qrioRbQmjxac5TVoTtZuot",
+            ),
+            (
+                "scc",
+                "sUvfdj9d7cnHNVcpHDkASXSKoAeTsKojEm",
+                "eRhXeqAbHtnnXvMLvArwR2wDxvq3CsbvBmbyZvexE4g5FFMGBQju",
+            ),
+            (
+                "grlc",
+                "GUXByHDZLvU4DnVH9imSFckt3HEQ5cFgE5",
+                "T33ydQRKp4FCW5LCLLUB7deioUMoveiwekdwUwyfRDeGZm76aUjV",
+            ),
+            (
+                "xmg",
+                "9ESLFKrNZg8HVyyiiAmhXMriiCbRK8FVhb",
+                "NtpKctL8ukbMDaxgrDRApm15qJjYYw8b6PCHpEH1fpYLgVWRA3wC",
+            ),
+            (
+                "xbtx",
+                "RKxTdfmtxtfLDKZBgx6SvNkBtNu9jRYnLh",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+            ),
+            (
+                "yec",
+                "s1Xt1mrPG6QvByYAQdnxZ8cKck8XoTt3xBY",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+            ),
+            (
+                "zcl",
+                "t1UYsZVJkLPeMjxEtACvSxfWuNmddpWfxzs",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+            ),
+            (
+                "glink",
+                "s1Xt1mrPG6QvByYAQdnxZ8cKck8XoTt3xBY",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+            ),
+            (
+                "ltz",
+                "L1JRPTaJj5C4b9W5GFtRG2Gvo1n8EGatNiz",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+            ),
+        ] {
+            let w = address_from_secret(ticker, PRIV1, Network::Mainnet).unwrap();
+            assert_eq!(w.address, address, "{ticker}");
+            assert_eq!(w.coin, ticker);
+            match &w.secret_std {
+                SecretStd::Wif(s) => assert_eq!(s, wif, "{ticker} wif"),
+                _ => panic!("{ticker}: expected SecretStd::Wif"),
+            }
+            // No testnet bytes were source-verified for these rows, so testnet must refuse.
+            assert!(
+                address_from_secret(ticker, PRIV1, Network::Testnet).is_err(),
+                "{ticker} must refuse --testnet"
+            );
+        }
+    }
+
+    /// The SegWit v0 rows added from source: default bech32 address, `--legacy` base58 address and
+    /// WIF for privkey=1, from the same independent Python oracle as the P2PKH rows above (its
+    /// bech32 encoder reproduced BIP173's `bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4` first).
+    ///
+    /// `qtc` is Bitcoin's bytes exactly, so every one of its strings is Bitcoin's. `lpepe`'s
+    /// base58 bytes are Litecoin's, so its legacy address and WIF are Litecoin's; only the HRP
+    /// differs.
+    #[test]
+    fn source_verified_segwit_rows_privkey_one() {
+        for (ticker, bech, legacy, wif) in [
+            (
+                "qtc",
+                "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+                "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+            ),
+            (
+                "kcn",
+                "kc1qw508d6qejxtdg4y5r3zarvary0c5xw7krw57ta",
+                "CT9A8CEgF7qJ3T6QuXSFQN31kEexxxa2oX",
+                "AcgzAVRUNzYwLdrvwvf3kK9fBF4QGCdFaiVUNXX9v6zGK22GbZxJ",
+            ),
+            (
+                "rin",
+                "rin1qw508d6qejxtdg4y5r3zarvary0c5xw7kjxphaw",
+                "RKxTdfmtxtfLDKZBgx6SvNkBtNu9jRYnLh",
+                "Up1YVLk7uuErCHVQyFCtfinZngmdwfyfc47WCQ8oJxgowjVzNeqs",
+            ),
+            (
+                "lpepe",
+                "lpep1qw508d6qejxtdg4y5r3zarvary0c5xw7kgve39y",
+                "LVuDpNCSSj6pQ7t9Pv6d6sUkLKoqDEVUnJ",
+                "T33ydQRKp4FCW5LCLLUB7deioUMoveiwekdwUwyfRDeGZm76aUjV",
+            ),
+        ] {
+            let w = address_from_secret(ticker, PRIV1, Network::Mainnet).unwrap();
+            assert_eq!(w.address, bech, "{ticker}");
+            match &w.secret_std {
+                SecretStd::Wif(s) => assert_eq!(s, wif, "{ticker} wif"),
+                _ => panic!("{ticker}: expected SecretStd::Wif"),
+            }
+            let l = address_from_secret_kind(ticker, PRIV1, Network::Mainnet, true).unwrap();
+            assert_eq!(l.address, legacy, "{ticker} --legacy");
+            assert!(
+                address_from_secret(ticker, PRIV1, Network::Testnet).is_err(),
+                "{ticker} must refuse --testnet"
+            );
+        }
+    }
+
+    /// OPCA (Opacra) for privkey=1: Monero's derivation under network prefix 30598. The expected
+    /// address comes from an independent Python oracle (from-scratch ed25519 and Keccak-256) that
+    /// first reproduced the moneroexamples vector `families::cryptonote` pins
+    /// (`46HSxE7Koi…EupMt6`). The prefix itself is tied to the chain by the Opacra dev-fund address
+    /// in `forager-addr`'s live-address test.
+    #[test]
+    fn opca_cryptonote_privkey_one() {
+        let w = address_from_secret("opca", PRIV1, Network::Mainnet).unwrap();
+        assert_eq!(
+            w.address,
+            "Pa2TGYJimYM4zuYqTSgeyw8td1YJh8u9DCwzWsmp5HmnEgsSJCQKh3Riv8m55AmRu4fua7NxW3FJ6depfE7esfL88dQMGBBgJN"
+        );
+        assert_eq!(w.address.len(), 98);
+        assert!(address_from_secret("opca", PRIV1, Network::Testnet).is_err());
+    }
+
     /// RVN P2PKH for privkey=1.
     /// Chain params confirmed: RavenProject/Ravencoin/src/chainparams.cpp
     ///   PUBKEY_ADDRESS=60(0x3c), SECRET_KEY=128(0x80).

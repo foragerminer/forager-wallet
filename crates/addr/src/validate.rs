@@ -764,6 +764,151 @@ mod tests {
         assert_eq!(detect_family(kad_bech32), None);
     }
 
+    /// Live-chain addresses for the coin rows added from each project's own chain parameters, one
+    /// or more per coin, each copied from a block explorer or pool page rather than derived here.
+    /// The source and the date read are in the third column.
+    ///
+    /// The test asserts more than the family. A base58 address must decode, checksum verified, to
+    /// exactly `row.version ‖ hash160`, using the version bytes the coin's own row carries. A
+    /// bech32 address must verify under the row's own HRP. A CryptoNote address must carry the
+    /// row's network prefix. So a wrong byte in any of these rows fails here against an address
+    /// the network issued, which a derivation KAT alone (this repository agreeing with itself)
+    /// cannot catch.
+    #[test]
+    fn live_chain_addresses_decode_under_their_coin_rows() {
+        use crate::coins::lookup;
+        const LIVE: &[(&str, &str, &str)] = &[
+            // Qubitcoin: payouts of blocks 117951 and 117929, explorer.qverse.pro/api/blocks.
+            ("qtc", "bc1qj6s4a20mdnzap5e8uhag3w6psvts737w89nc4f", "qverse 117951"),
+            ("qtc", "146jCcRXDZrXbgxUrxe6BKZWxL8S3nz9bY", "qverse 117929"),
+            // Kylacoin: pool payees, kylacoin.cedric-crispin.com (blocks 2426865 and 2376905).
+            ("kcn", "CLVStAuLgfgo2RERvowpDVoJ8Jfhy1RYf2", "cedric-crispin 2426865"),
+            ("kcn", "CdZxZLWW5aK83ytquWzynezYB2vPgUMRen", "cedric-crispin"),
+            ("kcn", "kc1q324c9jjzztlyghhy7wkjdfdnhqwklgdy9q0ww5", "cedric-crispin 2376905"),
+            // Rincoin: coinbase payees of blocks 832664 and 832650, rinscan.org.
+            ("rin", "REUoieyWeHVtviPhwTaKXcKu7wbPPoAHgT", "rinscan 832664"),
+            ("rin", "rin1qul3z25642xmlp865g9regu9kldkfuzfqk6n200", "rinscan 832650"),
+            // LuckyPepe: coinbase payees of blocks 378680 and 378678, explorer.luckypepe.org.
+            ("lpepe", "lpep1q4aa7j0l5jjac437ammcmm55jf3fqkwlvw3kjqs", "luckypepe 378680"),
+            ("lpepe", "lpep1q30mzam52ldplt3k4jkpjvhjrkj0ww9x5rskflv", "luckypepe 378678"),
+            // Telestai: coinbase of block 1205378, explorer.telestai.io.
+            ("tls", "TesBmcgLQsowvYEYPXpSHkkapoTbVV7Xfe", "telestai 1205378"),
+            ("tls", "ToRzMYn8WSLkogoNhYYW4ct1xL2b1z6utD", "telestai 1205370"),
+            // Raptoreum: coinbase outputs of block 1479736, explorer.raptoreum.com.
+            ("rtm", "RFvecMoe9YK6Wpd5SjxLsJX3MpAgGKjNvR", "raptoreum 1479736"),
+            ("rtm", "RTtyQU6DoSuNWetT4WUem5qXP5jNYGpwat", "raptoreum 1479736"),
+            // Verge: coinbase payees of blocks 9625333 and 9625332, verge-blockchain.info.
+            ("xvg", "DJ82ipRHUBX3AdBMiq1hgyXJMWrh3EWEtn", "verge 9625333"),
+            ("xvg", "DKjUG67iMStHRoQBLZg6pQk9ehkKYAsurj", "verge 9625332"),
+            // Verus: coinbase payees of blocks 4336570 and 4336560, insight.verus.io.
+            ("vrsc", "RT2WjVSEJgVtuEcmqU38Yx9kbMJvPwrD7C", "verus 4336570"),
+            ("vrsc", "RGoHykBesAoaC7RhghkCwPFb2mtT6MJGQr", "verus 4336560"),
+            // BitZeny: coinbase payees of blocks 4190640 and 4190620, blockbook-bitzeny.web4u.jp.
+            ("zny", "Zgw3vN8wJXFpfAm7cmR6ZL4HUMqctuw59b", "bitzeny 4190640"),
+            ("zny", "Zc8StHG9YqRJ55Chd3pk81RXsuiaSAaBEM", "bitzeny 4190620"),
+            // Yenten: coinbase payees of blocks 2330040 and 2330030, explorer2.yentencoin.info.
+            ("ytn", "YRxgcQB4NzqQJKzbvdxfJNcUK3aivR8evn", "yenten 2330040"),
+            ("ytn", "YgD6Cbf4r4ra6ztGiVbLXPFzZRmcja5aHH", "yenten 2330030"),
+            // Avian: coinbase payee of blocks 5419813-5419815, blockexplorer.avn.network.
+            ("avn", "RRxmCuiTYJTWY7tSkBfpCV5aBHyvogBPwF", "avian 5419815"),
+            // Litecoin Cash: output of tx 8f7fa474… in block 4583022, chainz.cryptoid.info/lcc.
+            ("lcc", "CaczP4jG3Mu1WTjL7VsccYRfaGSVH8CooR", "cryptoid 4583022"),
+            // Feathercoin: the Mining-Dutch coinbase payee of blocks 6450050-6450090,
+            // explorer.feathercoin.com.
+            ("ftc", "6rzMBtDgELmexriatZU2HeezgyAqPpR69m", "feathercoin 6450090"),
+            // Bitcore: coinbase payee of block 1898681, chainz.cryptoid.info/btx.
+            ("btx", "2W1qEwivdYSNY4doYQPDehBe1PzarmH6BF", "cryptoid 1898681"),
+            // Denarius: outputs of the stake tx in block 7688104, coinexplorer.net/D.
+            ("dnr", "DNCWsBxx9odjy8Sd1UexPcEPpy7oNZW2ZA", "coinexplorer 7688104"),
+            ("dnr", "DNCzBHmWHeH8ZBpUjEzienNAkMLgV2rS7t", "coinexplorer 7688104"),
+            // StakeCubeCoin: zpool coinbase of block 1538279, coinexplorer.net/SCC.
+            ("scc", "sPtiR4QzghahD7zzJmkLrLNMGLuJLEbCwG", "coinexplorer 1538279"),
+            ("scc", "sUXLYRe4oQoGy32GVsixPwWLRTxap4Lpg3", "coinexplorer 1538279"),
+            // Garlicoin: coinbase payees of blocks 6779252 and 6779249-51, the Yiimp explorer at
+            // lidonia.com/explorer?id=1431.
+            ("grlc", "GMLLSW7ofL4Ub9QdyexYN5X12J6qBZmr6W", "lidonia 6779252"),
+            ("grlc", "GdAEFatDXHCNV8PJVo3qnucDW3ouSpb89X", "lidonia 6779251"),
+            // Magi: PoW coinbase payee of block 5362646 and an address of block 5362640, the Yiimp
+            // explorer at unipoolia.com/explorer?id=1426.
+            ("xmg", "99McEraf41r6PJN35B2zxuPa4PMCTFWdrq", "unipoolia 5362646"),
+            ("xmg", "9Rhdm4NvjjwaqCXeu9TqZBu2miBuNXuKpH", "unipoolia 5362640"),
+            // Bitcoin Subsidium: no explorer answered, so this is the coin's own source-tree
+            // vector, phoenixkonsole/xbtx@cfd0d4c3 src/test/data/base58_keys_valid.json (mainnet
+            // pubkey, hash160 65a16059864a2fdbc7c99a4723a8395bc6f188eb).
+            ("xbtx", "RJYZeWxr1Ly8YgcvJU1qD5MR9jUtk14HkN", "xbtx base58_keys_valid.json"),
+            // Ycash: coinbase of block 3112600, yecblockexplorer.com.
+            ("yec", "s1en68LrvkFyspXuYu38N6D5zfARGw15Lo7", "ycash 3112600"),
+            // Zclassic: coinbase of blocks 3330702 and 3330705, explorer.zcl.zelcore.io.
+            ("zcl", "t1avQga2uiHSd5M81okyA4WVtdA9k3KjU9v", "zclassic 3330705"),
+            // Gemlink: coinbase of blocks 4625980 and 4625978, explorer.gemlink.org.
+            ("glink", "s1SgThJRXRAHHb1dgg6PEgYu9QzdvsRhRGz", "gemlink 4625980"),
+            ("glink", "s1hVivdxs4oZL9mk6s7wbjwJ3Qs3ZHgxVEM", "gemlink 4625978"),
+            // LitecoinZ: coinbase of blocks 1230704 and 1230706, explorer.litecoinz.info.
+            ("ltz", "L1Sw3opR2jTGgGT988peCKNXEevBikcCr75", "litecoinz 1230706"),
+            // Parallax: miner of blocks 65722-65726, explorer.parallaxprotocol.org. Mixed case, so
+            // the EIP-55 checksum is verified.
+            ("plx", "0x38432a328b3c6f15582292f7235F17b08A98C6AB", "parallax 65726"),
+            // Opacra: DEV_FUND_ADDRESS, opacra/opacra@66380059 src/cryptonote_config.h, also
+            // shown on explorer.opacra.org.
+            (
+                "opca",
+                "Pa2TDAomGjCM7y1s2S2APLcrGqhkddoyRgsx2Miqu2eRJKLcayF84VPea6SMcSDnxeg78smaG9fBeTpVj5EL1wbU81m8HT6rPW",
+                "opacra cryptonote_config.h",
+            ),
+        ];
+        // Every source read on 2026-11-24.
+        assert_eq!(
+            base58::decode_check("RJYZeWxr1Ly8YgcvJU1qD5MR9jUtk14HkN").unwrap()[1..],
+            crate::hexbytes::decode("65a16059864a2fdbc7c99a4723a8395bc6f188eb").unwrap()[..],
+            "the xbtx vector's own hash160"
+        );
+        for &(ticker, addr, src) in LIVE {
+            let row = lookup(ticker).unwrap_or_else(|| panic!("{ticker} has no row"));
+            let detected = detect_family(addr);
+            match row.params {
+                FamilyParams::P2pkh { version, .. } => {
+                    let payload = base58::decode_check(addr)
+                        .unwrap_or_else(|| panic!("{ticker} {addr} ({src}): bad checksum"));
+                    assert_eq!(
+                        payload.len(),
+                        version.len() + HASH160_LEN,
+                        "{ticker} {addr}"
+                    );
+                    assert!(payload.starts_with(version), "{ticker} {addr} ({src})");
+                    assert_eq!(detected, Some(Family::P2pkh), "{ticker} {addr}");
+                }
+                FamilyParams::SegwitV0 {
+                    hrp, p2pkh_version, ..
+                } => {
+                    if let Some((h, variant)) = bech32::verify(addr) {
+                        assert_eq!(h, hrp, "{ticker} {addr} ({src})");
+                        assert_eq!(variant, bech32::Variant::Bech32, "{ticker} {addr}");
+                        assert_eq!(detected, Some(Family::SegwitV0), "{ticker} {addr}");
+                    } else {
+                        let payload = base58::decode_check(addr)
+                            .unwrap_or_else(|| panic!("{ticker} {addr} ({src}): bad checksum"));
+                        assert_eq!(payload.len(), p2pkh_version.len() + HASH160_LEN);
+                        assert!(
+                            payload.starts_with(p2pkh_version),
+                            "{ticker} {addr} ({src})"
+                        );
+                        assert_eq!(detected, Some(Family::P2pkh), "{ticker} {addr}");
+                    }
+                }
+                FamilyParams::CryptoNote { network_byte, .. } => {
+                    let raw = cryptonote::decode(addr).expect("block base58");
+                    let (prefix, _) = cryptonote::read_varint(&raw).expect("varint");
+                    assert_eq!(prefix, network_byte, "{ticker} {addr} ({src})");
+                    assert_eq!(detected, Some(Family::CryptoNote), "{ticker} {addr}");
+                }
+                FamilyParams::Ethereum => {
+                    assert_eq!(detected, Some(Family::Ethereum), "{ticker} {addr}");
+                }
+                _ => panic!("{ticker}: no live-address rule for this family"),
+            }
+        }
+    }
+
     #[test]
     fn detects_bitcoin_bech32_segwit_v0() {
         // BIP173 example P2WPKH.

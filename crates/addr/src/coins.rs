@@ -382,6 +382,85 @@ pub static COINS: &[CoinSpec] = &[
             p2pkh_version_testnet: Some(&[0x4a]),
         },
     },
+    // QTC (Qubitcoin, qhash): address bytes BYTE-IDENTICAL to Bitcoin, like `scash` below —
+    //      PUBKEY_ADDRESS=0, SECRET_KEY=128(0x80), bech32_hrp="bc", SegwitHeight=1.
+    //      Source: super-quantum/qubitcoin@6c4f95a4c9b8975526fc7cb2eb32c721ab178cde
+    //      src/kernel/chainparams.cpp L183 (PUBKEY_ADDRESS), L185 (SECRET_KEY), L189 (bech32_hrp).
+    //      A QTC address is therefore indistinguishable from a BTC one for the same key; detection
+    //      answers the family (SegWit v0 / P2PKH), never the coin. The live chain agrees: block
+    //      117951's payout `bc1qj6s4a20mdnzap5e8uhag3w6psvts737w89nc4f` and block 117929's
+    //      `146jCcRXDZrXbgxUrxe6BKZWxL8S3nz9bY` (explorer.qverse.pro, read 2026-11-24) decode under
+    //      HRP `bc` and version 0. `hd_slip44: None`: SLIP-44 189189 "QTC" is Quantus Network, a
+    //      different chain, and no row names Qubitcoin. Testnet not source-verified: `None`.
+    CoinSpec {
+        ticker: "qtc",
+        name: "Qubitcoin",
+        hd_slip44: None,
+        params: FamilyParams::SegwitV0 {
+            hrp: "bc",
+            hrp_testnet: None,
+            wif: 0x80,
+            p2pkh_version: &[0x00],
+            p2pkh_version_testnet: None,
+        },
+    },
+    // KCN (Kylacoin): PUBKEY_ADDRESS=28(0x1c), SECRET_KEY=65(0x41), bech32_hrp="kc",
+    //      SegwitHeight=1. Source: kylacoin/kylacoin@eeeeb47b9e1c847421ba358bc80c87b7882d6999
+    //      src/kernel/chainparams.cpp L155, L157, L161, L92. SegWit is active from block 1 and
+    //      pools pay both `kc1q…` and `C…` (kylacoin.cedric-crispin.com, read 2026-11-24), so
+    //      `kc1q…` is the default and `--legacy` renders `C…`, as for btc/ltc/vtc. SLIP-44 942 "KCN
+    //      Kylacoin".
+    CoinSpec {
+        ticker: "kcn",
+        name: "Kylacoin",
+        hd_slip44: Some(942),
+        params: FamilyParams::SegwitV0 {
+            hrp: "kc",
+            hrp_testnet: None,
+            wif: 0x41,
+            p2pkh_version: &[0x1c],
+            p2pkh_version_testnet: None,
+        },
+    },
+    // RIN (Rincoin): PUBKEY_ADDRESS=60(0x3c), SECRET_KEY=188(0xbc), bech32_hrp="rin",
+    //      SegwitHeight=26500. Source: Rin-coin/rincoin@79e932b5dcdc3690977ca482ec77f75060ef6db9
+    //      (also served as rincoin-core/rincoin at the same SHA) src/chainparams.cpp L186, L189,
+    //      L193, L111. A Litecoin fork with MWEB. Coinbases pay both `rin1q…` and `R…`
+    //      (rinscan.org, read 2026-11-24), so `rin1q…` is the default and `--legacy` gives `R…`.
+    //      The legacy bytes equal Komodo's (0x3c / 0xbc), so a legacy RIN address and a KMD address
+    //      for the same key are identical. SLIP-44 9555 "RIN Rincoin" (205 "RIN" is Ringo).
+    CoinSpec {
+        ticker: "rin",
+        name: "Rincoin",
+        hd_slip44: Some(9555),
+        params: FamilyParams::SegwitV0 {
+            hrp: "rin",
+            hrp_testnet: None,
+            wif: 0xbc,
+            p2pkh_version: &[0x3c],
+            p2pkh_version_testnet: None,
+        },
+    },
+    // LPEPE (LuckyPepe): PUBKEY_ADDRESS=48(0x30), SECRET_KEY=176(0xb0), bech32_hrp="lpep",
+    //      SegwitHeight=1. Source:
+    //      LuckyPepeChain/luckypepe-chain@06b5fcb395066a831712d0cda72878094c605aed
+    //      src/chainparams.cpp L110, L112, L116, L63. The base58 bytes are Litecoin's, so
+    //      `--legacy` renders the LTC legacy address for the same key; the bech32 HRP is what
+    //      differs, and every coinbase output and pool worker seen is `lpep1q…`
+    //      (explorer.luckypepe.org, pool.luckypepe.org, read 2026-11-24). No SLIP-44 row:
+    //      `hd_slip44: None`.
+    CoinSpec {
+        ticker: "lpepe",
+        name: "LuckyPepe",
+        hd_slip44: None,
+        params: FamilyParams::SegwitV0 {
+            hrp: "lpep",
+            hrp_testnet: None,
+            wif: 0xb0,
+            p2pkh_version: &[0x30],
+            p2pkh_version_testnet: None,
+        },
+    },
     // ---- P2PKH family ----
     // DOGE: chainparams PUBKEY_ADDRESS=30(0x1e), SECRET_KEY=158(0x9e)
     //       testnet: PUBKEY_ADDRESS=113(0x71)
@@ -487,6 +566,249 @@ pub static COINS: &[CoinSpec] = &[
             compressed: true,
         },
     },
+    // New P2PKH rows below declare no testnet form (`version_testnet: None`): their testnet bytes
+    // are not source-verified here, so `--testnet` errors rather than emitting a wrong address.
+    // Each cites the coin's repo at a commit, the file and the lines, plus a real address the live
+    // chain issued, which `validate.rs` pins as the independent check.
+    //
+    // TLS (Telestai): PUBKEY_ADDRESS=66(0x42), SECRET_KEY=128(0x80). Base58 only (no bech32_hrp).
+    //      Source: Telestai-Project/telestai@7594e4a4c311673c113f5d160adfa9d14634d13b
+    //      src/chainparams.cpp L197, L199. The source sets `nExtCoinType = 10117` (L204), but
+    //      SLIP-44 registers no Telestai row, so `hd_slip44: None`.
+    CoinSpec {
+        ticker: "tls",
+        name: "Telestai",
+        hd_slip44: None,
+        params: FamilyParams::P2pkh {
+            version: &[0x42],
+            version_testnet: None,
+            wif: 0x80,
+            compressed: true,
+        },
+    },
+    // RTM (Raptoreum): PUBKEY_ADDRESS=60(0x3c), SECRET_KEY=128(0x80). A Dash fork, no SegWit.
+    //      Source: Raptor3um/raptoreum@900794ea94ff11023667765173295b459d32732c src/chainparams.cpp
+    //      L260, L264. The bytes equal Ravencoin's, so an RTM address and an RVN address for the
+    //      same key are identical. `hd_slip44: None` although SLIP-44 lists RTM as 10226: Raptoreum
+    //      Core derives at `nExtCoinType = 200` (L271), so a 10226 path would not restore in the
+    //      coin's own wallet, and a 200 path is not the registered one.
+    CoinSpec {
+        ticker: "rtm",
+        name: "Raptoreum",
+        hd_slip44: None,
+        params: FamilyParams::P2pkh {
+            version: &[0x3c],
+            version_testnet: None,
+            wif: 0x80,
+            compressed: true,
+        },
+    },
+    // XVG (Verge): PUBKEY_ADDRESS=30(0x1e), SECRET_KEY=158(0x9e). Source:
+    //      vergecurrency/verge@6e9651d5ee0e19403007b8bbd83039fd3b3f8913 src/chainparams.cpp L254,
+    //      L256. Byte-identical to Dogecoin's, so an XVG address equals the DOGE address for the
+    //      same key. The params set bech32_hrp="vg" (L260), but no `vg1…` address was found on
+    //      chain and every coinbase seen pays `D…`, so the row is P2PKH. SLIP-44 77 "XVG Verge
+    //      Currency".
+    CoinSpec {
+        ticker: "xvg",
+        name: "Verge",
+        hd_slip44: Some(77),
+        params: FamilyParams::P2pkh {
+            version: &[0x1e],
+            version_testnet: None,
+            wif: 0x9e,
+            compressed: true,
+        },
+    },
+    // VRSC (Verus): PUBKEY_ADDRESS=60(0x3c), SECRET_KEY=188(0xbc). A Komodo-derived chain, and
+    //      the bytes equal Komodo's, so a VRSC R-address equals the KMD address for the same key.
+    //      Source: VerusCoin/VerusCoin@5ec1d83b16253aa56abda5588be76ce2d84dee8f src/chainparams.cpp
+    //      L176, L181. Identity `i…` addresses (IDENTITY_ADDRESS=102) are not keys and are not
+    //      minted here. No SLIP-44 row: `hd_slip44: None`.
+    CoinSpec {
+        ticker: "vrsc",
+        name: "Verus",
+        hd_slip44: None,
+        params: FamilyParams::P2pkh {
+            version: &[0x3c],
+            version_testnet: None,
+            wif: 0xbc,
+            compressed: true,
+        },
+    },
+    // ZNY (BitZeny): PUBKEY_ADDRESS=81(0x51), SECRET_KEY=128(0x80). Source:
+    //      BitzenyCoreDevelopers/bitzeny@11f7e27a6a9967538b289f9918e71db37b933610 (default branch
+    //      z2.0.x) src/chainparams.cpp L131, L133. No bech32_hrp on the released branch.
+    //      SLIP-44 123 "ZNY BitZeny".
+    CoinSpec {
+        ticker: "zny",
+        name: "BitZeny",
+        hd_slip44: Some(123),
+        params: FamilyParams::P2pkh {
+            version: &[0x51],
+            version_testnet: None,
+            wif: 0x80,
+            compressed: true,
+        },
+    },
+    // YTN (Yenten): PUBKEY_ADDRESS=78(0x4e), SECRET_KEY=123(0x7b). Source:
+    //      yentencoin/yenten@a0ad564692abc0814800c41f5ab7343f39134ef8 (branch yenten-6)
+    //      src/chainparams.cpp L139, L141. The params set bech32_hrp="ytn" (L145), but every
+    //      coinbase seen pays `Y…`, so the row is P2PKH. SLIP-44 9981 "YTN Yenten".
+    CoinSpec {
+        ticker: "ytn",
+        name: "Yenten",
+        hd_slip44: Some(9981),
+        params: FamilyParams::P2pkh {
+            version: &[0x4e],
+            version_testnet: None,
+            wif: 0x7b,
+            compressed: true,
+        },
+    },
+    // AVN (Avian): PUBKEY_ADDRESS=60(0x3c), SECRET_KEY=128(0x80). Source:
+    //      AvianNetwork/Avian@f865de884c854778564d842aa2c397794e21a91f src/kernel/chainparams.cpp
+    //      L199, L201. A Ravencoin fork with Ravencoin's bytes, so an AVN address equals the RVN
+    //      address for the same key. bech32_hrp="avn" (L205) exists, but coinbases pay `R…`.
+    //      SLIP-44 921 "AVN Avian Network".
+    CoinSpec {
+        ticker: "avn",
+        name: "Avian",
+        hd_slip44: Some(921),
+        params: FamilyParams::P2pkh {
+            version: &[0x3c],
+            version_testnet: None,
+            wif: 0x80,
+            compressed: true,
+        },
+    },
+    // LCC (Litecoin Cash): PUBKEY_ADDRESS=28(0x1c), SECRET_KEY=176(0xb0). Source:
+    //      litecoincash-project/litecoincash@cf67257a008252ed283de4538bb5e4582036aaab
+    //      src/chainparams.cpp L200, L203. bech32_hrp="lcc" (L207) exists, but the network's
+    //      payouts and its p2pool take the `C…` form. SLIP-44 192 "LCC LitecoinCash".
+    CoinSpec {
+        ticker: "lcc",
+        name: "Litecoin Cash",
+        hd_slip44: Some(192),
+        params: FamilyParams::P2pkh {
+            version: &[0x1c],
+            version_testnet: None,
+            wif: 0xb0,
+            compressed: true,
+        },
+    },
+    // FTC (Feathercoin): PUBKEY_ADDRESS=14(0x0e), SECRET_KEY=142(0x8e). Source:
+    //      FeatherCoin/Feathercoin@d091d80b8b8eb0ac8cf9f8915b85d5b2eaf2aaca src/chainparams.cpp
+    //      L137, L139. bech32_hrp="fc" (L143) and SegwitHeight=2157120 (L79) make `fc1q…` valid,
+    //      but pools pay the base58 form (the Mining-Dutch coinbase payee is `6…`) and no `fc1…`
+    //      was found in ~30 recent blocks, so the row is P2PKH, as for `kad`. Version 14 renders
+    //      `6` or `7` depending on the key. SLIP-44 8 "FTC Feathercoin".
+    CoinSpec {
+        ticker: "ftc",
+        name: "Feathercoin",
+        hd_slip44: Some(8),
+        params: FamilyParams::P2pkh {
+            version: &[0x0e],
+            version_testnet: None,
+            wif: 0x8e,
+            compressed: true,
+        },
+    },
+    // BTX (Bitcore): PUBKEY_ADDRESS=3(0x03), SECRET_KEY=128(0x80). Source:
+    //      bitcore-btx/BitCore@04069f62c3c259220bcb8189f068d7ef69a021c2 src/chainparams.cpp L185,
+    //      L190 (LIMXTEC/BitCore@73fd5abe, the older home, has the same bytes). bech32_hrp="btx"
+    //      (L195) and SegWit is ALWAYS_ACTIVE, but coinbases pay `2…` and no `btx1…` was found, so
+    //      the row is P2PKH. SLIP-44 160 "BTX Bitcore".
+    CoinSpec {
+        ticker: "btx",
+        name: "Bitcore",
+        hd_slip44: Some(160),
+        params: FamilyParams::P2pkh {
+            version: &[0x03],
+            version_testnet: None,
+            wif: 0x80,
+            compressed: true,
+        },
+    },
+    // DNR (Denarius): PUBKEY_ADDRESS=30(0x1e); the WIF byte is `128 + PUBKEY_ADDRESS` = 158(0x9e).
+    //      Source: metaspartan/denarius@fac80b73e59d59a978c1ce40bd86952e95b16c11 src/base58.h L109
+    //      and src/base58.cpp L351 (a PPCoin-era tree with no chainparams.cpp). Byte-identical to
+    //      Dogecoin. No bech32. SLIP-44 116 "DNR Denarius" (1447 "DNR" is Dinero).
+    CoinSpec {
+        ticker: "dnr",
+        name: "Denarius",
+        hd_slip44: Some(116),
+        params: FamilyParams::P2pkh {
+            version: &[0x1e],
+            version_testnet: None,
+            wif: 0x9e,
+            compressed: true,
+        },
+    },
+    // SCC (StakeCubeCoin): PUBKEY_ADDRESS=125(0x7d), SECRET_KEY=253(0xfd). Source:
+    //      stakecube/StakeCubeCoin@1542625b0b3b56b8eb2ad8846bd66aa2507d7379 (branch develop)
+    //      src/chainparams.cpp L312, L316, and `nExtCoinType = 522` (L323) = SLIP-44 522
+    //      "SCC StakeCubeCoin". No bech32. Version 125 is Bitcore's P2SH byte, so an SCC address
+    //      opens `s` like a BTX script address; detection reports the family either way.
+    CoinSpec {
+        ticker: "scc",
+        name: "StakeCubeCoin",
+        hd_slip44: Some(522),
+        params: FamilyParams::P2pkh {
+            version: &[0x7d],
+            version_testnet: None,
+            wif: 0xfd,
+            compressed: true,
+        },
+    },
+    // GRLC (Garlicoin): PUBKEY_ADDRESS=38(0x26), SECRET_KEY=176(0xb0). Source:
+    //      GarlicoinOrg/Garlicoin@31985359cf2dceec7fd3b699698f9cf0baa59968 src/chainparams.cpp
+    //      L137, L139. The version byte is Bitcoin Gold's, the WIF byte Litecoin's.
+    //      bech32_hrp="grlc" (L143) exists, but every coinbase seen pays `G…`. SLIP-44 69420 "GRLC
+    //      Garlicoin". (The `GRLC` that Trezor and OneKey list is an ERC-20 token, not this chain.)
+    CoinSpec {
+        ticker: "grlc",
+        name: "Garlicoin",
+        hd_slip44: Some(69420),
+        params: FamilyParams::P2pkh {
+            version: &[0x26],
+            version_testnet: None,
+            wif: 0xb0,
+            compressed: true,
+        },
+    },
+    // XMG (Magi, m7m): PUBKEY_ADDRESS=20(0x14); the WIF byte is `128 + PUBKEY_ADDRESS` = 148(0x94),
+    //      with the compressed-key flag appended. Source:
+    //      magi-project/magi@d316219f3c5bfce8fe491df07fa0df6e99106fd6 src/base58.h L279 and
+    //      L408-410 (a PPCoin-era tree with no chainparams.cpp). No bech32. No SLIP-44 row.
+    CoinSpec {
+        ticker: "xmg",
+        name: "Magi",
+        hd_slip44: None,
+        params: FamilyParams::P2pkh {
+            version: &[0x14],
+            version_testnet: None,
+            wif: 0x94,
+            compressed: true,
+        },
+    },
+    // XBTX (Bitcoin Subsidium, scrypt-n): PUBKEY_ADDRESS=60(0x3c), SECRET_KEY=128(0x80), so
+    //      Ravencoin's bytes. Source: phoenixkonsole/xbtx@cfd0d4c379a46d56c84acde3a76adbf268e40733
+    //      (the source zpool links) src/chainparams.cpp L189, L191. No explorer was reachable, so
+    //      the independent check is the tree's own regenerated vector instead of a live address:
+    //      src/test/data/base58_keys_valid.json lists `RJYZeWxr1Ly8YgcvJU1qD5MR9jUtk14HkN` as a
+    //      mainnet pubkey address. No SLIP-44 row.
+    CoinSpec {
+        ticker: "xbtx",
+        name: "Bitcoin Subsidium",
+        hd_slip44: None,
+        params: FamilyParams::P2pkh {
+            version: &[0x3c],
+            version_testnet: None,
+            wif: 0x80,
+            compressed: true,
+        },
+    },
     // ---- Ethereum family ----
     // ETC shares ETH's address-derivation (EIP-55 checksummed keccak160); no chain params differ.
     CoinSpec {
@@ -553,6 +875,20 @@ pub static COINS: &[CoinSpec] = &[
         hd_slip44: None,
         params: FamilyParams::CryptoNote {
             network_byte: 0x3ef318,
+            network_byte_testnet: None,
+        },
+    },
+    // OPCA (Opacra): a Monero v0.18.5.1 fork (RandomX variant `rx/opca`) that keeps Monero's key
+    // scheme and changes the network prefix: CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX = 30598,
+    // rendering `Pa…`. Source: opacra/opacra@66380059d692b20827d0b8d15c63560ee3f6b084
+    // src/cryptonote_config.h L286. The same file's DEV_FUND_ADDRESS decodes to prefix 30598 with a
+    // valid Keccak checksum (pinned in `validate.rs`). Testnet (8479, L339) is not modelled.
+    CoinSpec {
+        ticker: "opca",
+        name: "Opacra",
+        hd_slip44: None,
+        params: FamilyParams::CryptoNote {
+            network_byte: 30598,
             network_byte_testnet: None,
         },
     },
@@ -633,6 +969,18 @@ pub static COINS: &[CoinSpec] = &[
     CoinSpec {
         ticker: "octa",
         name: "OctaSpace",
+        hd_slip44: None,
+        params: FamilyParams::Ethereum,
+    },
+    // Parallax (PLX, XHash): a go-ethereum fork with chain id 2110 whose `common.Address` is the
+    // 20-byte EIP-55 form (ParallaxProtocol/parallax@9c903545db4f33c7075846d932084cb8d9e5c073
+    // util/types.go L201-235, kernel/chainparams/config.go L45), derived exactly as Ethereum's:
+    // `Keccak256(pubkey[1:])[12:]` (crypto/crypto.go L278-281). Its wallet derives at
+    // `m/44'/60'` (wallet/hd.go L31), Ethereum's path, but SLIP-44 has no Parallax row, so
+    // `hd_slip44: None`, as for `ethw` and `octa`.
+    CoinSpec {
+        ticker: "plx",
+        name: "Parallax",
         hd_slip44: None,
         params: FamilyParams::Ethereum,
     },
@@ -816,6 +1164,67 @@ pub static COINS: &[CoinSpec] = &[
             compressed: true,
         },
         hd_slip44: Some(323),
+    },
+    // Zcash-family rows added from each coin's own chainparams, with the live-chain addresses
+    // `validate.rs` pins. `version_testnet: None` for the reason above.
+    //   yec   Ycash      ycashfoundation/ycash@624c12814e123ba0384d0b74e2b96fa5e2a373e6
+    //         src/chainparams.cpp L149 PUBKEY_ADDRESS {0x1C,0x28} ("s1"), L153 SECRET_KEY {0x80},
+    //         L89 bip44CoinType=347 = SLIP-44 347 "YEC Ycash". The LEGACY_PUBKEY_ADDRESS
+    //         {0x1C,0xB8} (L172) is kept only for pre-fork founders addresses.
+    CoinSpec {
+        ticker: "yec",
+        name: "Ycash",
+        hd_slip44: Some(347),
+        params: FamilyParams::P2pkh {
+            version: &[0x1c, 0x28],
+            version_testnet: None,
+            wif: 0x80,
+            compressed: true,
+        },
+    },
+    //   zcl   Zclassic   ZclassicCommunity/zclassic@8c6ee678c099d8fb38732caf12856b32286e6e0b
+    //         src/chainparams.cpp L158 {0x1C,0xB8} ("t1", Zcash's), L162 {0x80}, L84
+    //         bip44CoinType=147 = SLIP-44 147 "ZCL ZClassic".
+    CoinSpec {
+        ticker: "zcl",
+        name: "Zclassic",
+        hd_slip44: Some(147),
+        params: FamilyParams::P2pkh {
+            version: &[0x1c, 0xb8],
+            version_testnet: None,
+            wif: 0x80,
+            compressed: true,
+        },
+    },
+    //   glink Gemlink    gemlink/gemlink@6f5780602989ff78a54c0b3081752cce3430c496 (branch
+    //         development) src/chainparams.cpp L174 {0x1C,0x28} ("s1", Ycash's), L178 {0x80}. The
+    //         source sets bip44CoinType=407, but SLIP-44 407 is "HDD HDDCash", so `hd_slip44:
+    //         None`.
+    CoinSpec {
+        ticker: "glink",
+        name: "Gemlink",
+        hd_slip44: None,
+        params: FamilyParams::P2pkh {
+            version: &[0x1c, 0x28],
+            version_testnet: None,
+            wif: 0x80,
+            compressed: true,
+        },
+    },
+    //   ltz   LitecoinZ  litecoinz-core/litecoinz@9d375679009f60e7e443fd50b305f35f9fd3c14c
+    //         src/chainparams.cpp L170 {0x0A,0xB3} ("L1"), L174 {0x80}, L76 bip44CoinType=221 =
+    //         SLIP-44 221 "LTZ LitecoinZ". The params also set bech32_hrp="ltz" (L185) and
+    //         SegwitHeight=590000, but coinbases pay `L1…`, so the row is P2PKH (as for `kad`).
+    CoinSpec {
+        ticker: "ltz",
+        name: "LitecoinZ",
+        hd_slip44: Some(221),
+        params: FamilyParams::P2pkh {
+            version: &[0x0a, 0xb3],
+            version_testnet: None,
+            wif: 0x80,
+            compressed: true,
+        },
     },
     // dgb: deferred until its KATs land.  (vtc landed: it is a SegWit v0 row above, with
     // single-key, --legacy and testnet KATs in the wallet crate and BIP44/84/86 vectors in

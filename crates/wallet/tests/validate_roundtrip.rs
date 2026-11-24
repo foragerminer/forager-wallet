@@ -57,6 +57,7 @@ fn every_generated_cryptonote_address_round_trips_through_detection() {
         ("xmr", Network::Testnet),
         ("zeph", Network::Mainnet),
         ("sal", Network::Mainnet),
+        ("opca", Network::Mainnet),
     ] {
         for i in 1u32..=4 {
             let secret = format!("{i:064x}");
@@ -665,4 +666,73 @@ fn every_generated_evrmore_address_round_trips_through_detection() {
     // The PRIV1 row is the KAT `lib.rs` pins, repeated here through the detection seam.
     let w = forager_wallet::address_from_secret("evr", PRIV1, Network::Mainnet).unwrap();
     assert_eq!(w.address, "ETqB3jj7o29g8cnr2d6qpzPwtkwgTuXt3Q");
+}
+
+/// Every address the generator emits for the rows added from each coin's own chain parameters
+/// classifies as the family its row declares, and `--legacy` on a SegWit row classifies as P2PKH.
+///
+/// Several of these rows reuse another coin's version byte (see `COINS.md`), and two of them, `ftc`
+/// and the Zcash-family two-byte prefixes, are the shapes detection has to get right by payload
+/// length rather than leading character. 32 keys each, so a prefix that straddles a base58 digit
+/// boundary (`ftc` renders `6…` or `7…`) is exercised on both sides.
+#[test]
+fn every_generated_source_verified_row_round_trips_through_detection() {
+    for (ticker, family) in [
+        ("qtc", Family::SegwitV0),
+        ("kcn", Family::SegwitV0),
+        ("rin", Family::SegwitV0),
+        ("lpepe", Family::SegwitV0),
+        ("tls", Family::P2pkh),
+        ("rtm", Family::P2pkh),
+        ("xvg", Family::P2pkh),
+        ("vrsc", Family::P2pkh),
+        ("zny", Family::P2pkh),
+        ("ytn", Family::P2pkh),
+        ("avn", Family::P2pkh),
+        ("lcc", Family::P2pkh),
+        ("ftc", Family::P2pkh),
+        ("btx", Family::P2pkh),
+        ("dnr", Family::P2pkh),
+        ("scc", Family::P2pkh),
+        ("yec", Family::P2pkh),
+        ("zcl", Family::P2pkh),
+        ("glink", Family::P2pkh),
+        ("ltz", Family::P2pkh),
+        ("grlc", Family::P2pkh),
+        ("xmg", Family::P2pkh),
+        ("xbtx", Family::P2pkh),
+        ("plx", Family::Ethereum),
+    ] {
+        for i in 1u32..=32 {
+            let secret = format!("{i:064x}");
+            let w = forager_wallet::address_from_secret(ticker, &secret, Network::Mainnet).unwrap();
+            assert_eq!(
+                detect_family(&w.address),
+                Some(family),
+                "{ticker}: {}",
+                w.address
+            );
+            assert_eq!(
+                check(&w.address, family),
+                Verdict::Ok,
+                "{ticker}: {}",
+                w.address
+            );
+            if family == Family::SegwitV0 {
+                let l = forager_wallet::address_from_secret_kind(
+                    ticker,
+                    &secret,
+                    Network::Mainnet,
+                    true,
+                )
+                .unwrap();
+                assert_eq!(
+                    detect_family(&l.address),
+                    Some(Family::P2pkh),
+                    "{ticker}: {}",
+                    l.address
+                );
+            }
+        }
+    }
 }
