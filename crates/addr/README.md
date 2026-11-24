@@ -19,9 +19,12 @@ Families: Taproot (bech32m), SegWit v0 (bech32), P2PKH (base58check), Ethereum (
 CryptoNote, Kaspa-family (CashAddr), Ergo, Alephium, XDAG, Warthog, Epic Cash epicbox, Conflux Core
 Space (CIP-37), Parano1d (bech32m `o1…`), Quantus (SS58 `qz…`), Nockchain (plain base58 of a
 Tip5 digest), Xelis (bech32 with a `:` separator, `xel:…`) and Tari (a base58 dual address,
-`12…`/`14…`), across 64 coins.
+`12…`/`14…`), across 65 coins. Groestlcoin is classified as SegWit v0 and P2PKH: its bech32
+address is Bitcoin's construction, and its base58 address is P2PKH under a double-Groestl-512
+checksum.
 
-Classification verifies a checksum wherever the scheme has one: base58check's double-SHA256,
+Classification verifies a checksum wherever the scheme has one: base58check's double-SHA256
+(double Groestl-512 for Groestlcoin),
 bech32/bech32m's polymod, CashAddr's polymod, Ergo's Blake2b-256, CryptoNote's Keccak-256, and
 Ethereum's EIP-55 case checksum. A mistyped address is therefore reported as unclassifiable rather
 than as a confident answer. Two scheme-level exceptions, stated plainly because they are the crate's
@@ -45,13 +48,14 @@ No key material, no entropy source, no curve arithmetic, no mnemonic wordlist. C
 decodes and checksums — it never touches a private key.
 
 That is enforced, not merely intended: `tests/hygiene.rs` asserts the external dependency list is
-exactly `sha2`, `blake2b_simd`, `num-bigint` and `num-traits`. The two hash crates compute the
-address checksums — `sha2` for base58check, `blake2b_simd` for Ergo — and the two arithmetic crates
+exactly `sha2`, `blake2b_simd`, `groestl`, `num-bigint` and `num-traits`. The three hash crates
+compute the address checksums — `sha2` for base58check, `blake2b_simd` for Ergo, `groestl` for
+Groestlcoin's base58check — and the two arithmetic crates
 do base58's decode, whose alphabet is not a power of two. The test fails the build if a curve,
 entropy or mnemonic crate is ever added, and equally if an entry stops being used, so the list
 cannot become a set of pre-authorized slots.
 
-The fourth checksum hash, Keccak-256 — Ethereum's EIP-55 and CryptoNote's four-byte address
+The remaining checksum hash, Keccak-256 — Ethereum's EIP-55 and CryptoNote's four-byte address
 checksum both use it — is written out in `src/hash.rs` rather than taken from a crate. It is a
 ~130-line permutation with two published known-answer tests, and writing it out is what lets those
 two checksums be verified without spending an entry on this list. It is deliberately the *original*

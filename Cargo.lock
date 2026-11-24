@@ -356,6 +356,7 @@ name = "forager-addr"
 version = "0.5.2"
 dependencies = [
  "blake2b_simd",
+ "groestl",
  "num-bigint",
  "num-traits",
  "sha2 0.11.1",
@@ -404,6 +405,15 @@ dependencies = [
  "libc",
  "r-efi",
  "rand_core",
+]
+
+[[package]]
+name = "groestl"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b8762529e867a729da92d94774a0564b1299f90a0e87d23a09e2ab95d08e123"
+dependencies = [
+ "digest 0.11.3",
 ]
 
 [[package]]

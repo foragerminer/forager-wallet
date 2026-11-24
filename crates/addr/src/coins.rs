@@ -13,8 +13,12 @@ use std::sync::{Mutex, OnceLock};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Family {
     /// Bitcoin-style P2PKH: `BASE58CHECK(version ‖ HASH160(compressed_or_uncompressed_pubkey))`.
+    /// Detection also answers this family for a Groestlcoin P2PKH address, whose base58check
+    /// checksum is double Groestl-512 instead of double SHA-256 (see [`FamilyParams::Groestlcoin`]).
     P2pkh,
-    /// Bitcoin-style SegWit v0 P2WPKH (bech32) with an optional P2PKH legacy path.
+    /// Bitcoin-style SegWit v0 P2WPKH (bech32) with an optional P2PKH legacy path. Groestlcoin
+    /// ([`FamilyParams::Groestlcoin`]) is in this family too: its bech32 address is Bitcoin's
+    /// construction, and only its legacy path and WIF change the base58check hash.
     SegwitV0,
     /// Bitcoin-style Taproot P2TR (bech32m key-path only, BIP340/341/350).
     Taproot,
@@ -76,6 +80,26 @@ pub enum Family {
     /// form opens `14`.
     Tari,
 }
+
+/// Groestlcoin's bech32 HRP on mainnet, `grs`. Source: `Groestlcoin/groestlcoin@17a57752`
+/// `src/kernel/chainparams.cpp` L182 (`bech32_hrp`).
+pub const GROESTLCOIN_HRP: &str = "grs";
+
+/// Groestlcoin's bech32 HRP on testnet, `tgrs`: the same file, L273.
+pub const GROESTLCOIN_HRP_TESTNET: &str = "tgrs";
+
+/// Groestlcoin's mainnet P2PKH version byte, 36 (`F…`): the same file, L176
+/// (`base58Prefixes[PUBKEY_ADDRESS]`).
+pub const GROESTLCOIN_P2PKH_VERSION: u8 = 36;
+
+/// Groestlcoin's testnet P2PKH version byte, 111 (`m…`/`n…`): the same file, L267.
+pub const GROESTLCOIN_P2PKH_VERSION_TESTNET: u8 = 111;
+
+/// Groestlcoin's mainnet WIF byte, 128: the same file, L178 (`base58Prefixes[SECRET_KEY]`).
+pub const GROESTLCOIN_WIF: u8 = 0x80;
+
+/// Groestlcoin's testnet WIF byte, 239: the same file, L269.
+pub const GROESTLCOIN_WIF_TESTNET: u8 = 0xef;
 
 /// Human-readable part of a mainnet Xelis address. Source: `xelis-project/xelis-blockchain@db59b5c2`
 /// `xelis_common/src/config.rs` (`PREFIX_ADDRESS`).
@@ -143,10 +167,10 @@ pub enum FamilyParams {
     ///     `version` field is a slice and could hold two bytes, but [`parse_token`]'s `ver=` reads
     ///     a single byte, so no token can even name it.
     ///
-    /// Neither is in [`COINS`], and neither can be added by a table row: each needs a hash
-    /// primitive this workspace does not implement, and the table's own rule is that no row lands
-    /// without a passing KAT.  The defence for the runtime escape hatch is therefore the
-    /// [`TokenSyntax::caveat`] on the `p2pkh` grammar row, which the CLI prints.
+    /// Neither can be expressed by a `P2pkh` row. Groestlcoin has its own variant,
+    /// [`FamilyParams::Groestlcoin`], and its own `grs` row; Decred is not supported. The defence
+    /// for the runtime escape hatch is the [`TokenSyntax::caveat`] on the `p2pkh` grammar row,
+    /// which the CLI prints and which points a Groestlcoin user at `grs`.
     P2pkh {
         /// Version prefix for mainnet addresses (e.g. `[0x00]` for BTC, `[0x1E]` for DOGE,
         /// `[0x1C, 0xB8]` for a Zcash-family t-address).
@@ -233,6 +257,15 @@ pub enum FamilyParams {
     /// Tari has no per-coin parameters: the network byte is the protocol constant
     /// [`TARI_NETWORK_MAINNET`].
     Tari,
+    /// Groestlcoin: SegWit v0 P2WPKH (bech32, HRP [`GROESTLCOIN_HRP`]) by default, with a P2PKH
+    /// legacy path, exactly as [`FamilyParams::SegwitV0`] except for one primitive. Groestlcoin
+    /// replaced the base58check checksum, so its P2PKH address and its WIF end in
+    /// `Groestl512(Groestl512(payload))[..4]` rather than Bitcoin's double SHA-256
+    /// ([`crate::codec::base58::encode_check_groestl`]). HASH160 and bech32 are Bitcoin's. A
+    /// separate variant because the hash cannot be a parameter of the `SegwitV0` rows: every one of
+    /// them, and every `segwit:` token, assumes SHA256d. The bytes are the protocol constants
+    /// `GROESTLCOIN_*` above. Its [`Family`] is [`Family::SegwitV0`].
+    Groestlcoin,
 }
 
 impl FamilyParams {
@@ -241,7 +274,8 @@ impl FamilyParams {
     pub fn family(&self) -> Family {
         match self {
             FamilyParams::P2pkh { .. } => Family::P2pkh,
-            FamilyParams::SegwitV0 { .. } => Family::SegwitV0,
+            // Groestlcoin is SegWit v0 with its own base58check hash; see its variant.
+            FamilyParams::SegwitV0 { .. } | FamilyParams::Groestlcoin => Family::SegwitV0,
             FamilyParams::Taproot { .. } => Family::Taproot,
             FamilyParams::Ethereum => Family::Ethereum,
             FamilyParams::CryptoNote { .. } => Family::CryptoNote,
@@ -474,6 +508,20 @@ pub static COINS: &[CoinSpec] = &[
             p2pkh_version: &[0x30],
             p2pkh_version_testnet: None,
         },
+    },
+    // ---- Groestlcoin (SegWit v0, Groestl-512 base58check) ----
+    // GRS: PUBKEY_ADDRESS=36 (`F…`), SECRET_KEY=128, bech32_hrp="grs"; testnet 111/239/"tgrs".
+    //      Source: Groestlcoin/groestlcoin@17a57752c63bef11f316d57477f981ca6af79740
+    //      src/kernel/chainparams.cpp L176-L182 (mainnet), L267-L273 (testnet); the base58check
+    //      checksum is double Groestl-512 (src/base58.cpp L148/L162 → src/groestlcoin.h
+    //      `HashForAddress` → src/groestlcoin-hash.cpp `HashGroestl`). SLIP-44 17 "GRS Groestlcoin",
+    //      and Groestlcoin Core's own descriptor wallet derives at m/84h/17h (src/wallet/
+    //      walletutil.cpp L56, L75). bech32 `grs1q…` by default, `--legacy` renders `F…`.
+    CoinSpec {
+        ticker: "grs",
+        name: "Groestlcoin",
+        hd_slip44: Some(17),
+        params: FamilyParams::Groestlcoin,
     },
     // ---- P2PKH family ----
     // DOGE: chainparams PUBKEY_ADDRESS=30(0x1e), SECRET_KEY=158(0x9e)
@@ -1310,9 +1358,9 @@ pub static TOKEN_GRAMMAR: &[TokenSyntax] = &[
         caveat: Some(
             "This token sets bytes, not hashes: it always uses Bitcoin's HASH160 pubkey hash\n\
              and Bitcoin's SHA256d base58check checksum. That is right for Bitcoin-derived\n\
-             chains and WRONG for Groestlcoin (double-Groestl-512 checksum) and Decred\n\
-             (BLAKE-256, two-byte version) — for those, both the address and the WIF are\n\
-             wrong, and no `ver=` can fix it.",
+             chains and WRONG for Groestlcoin (double-Groestl-512 checksum; use `--coin grs`)\n\
+             and Decred (BLAKE-256, two-byte version) — for those, both the address and the\n\
+             WIF are wrong, and no `ver=` can fix it.",
         ),
     },
     TokenSyntax {
@@ -1327,7 +1375,8 @@ pub static TOKEN_GRAMMAR: &[TokenSyntax] = &[
         // independently, and a user reading the `segwit:` line may never see the `p2pkh:` one.
         caveat: Some(
             "The `--legacy` address form and the WIF are base58check with Bitcoin's SHA256d\n\
-             checksum, so they are wrong for a chain that changed it (e.g. Groestlcoin).",
+             checksum, so they are wrong for a chain that changed it (Groestlcoin: use\n\
+             `--coin grs`).",
         ),
     },
     TokenSyntax {
@@ -1457,6 +1506,14 @@ pub static TOKEN_GRAMMAR: &[TokenSyntax] = &[
         flags: &[],
         syntax: "tari:",
         example: "tari:",
+        caveat: None,
+    },
+    TokenSyntax {
+        family: "groestlcoin",
+        keys: &[],
+        flags: &[],
+        syntax: "groestlcoin:",
+        example: "groestlcoin:",
         caveat: None,
     },
 ];
@@ -1589,6 +1646,7 @@ pub fn parse_token(token: &str) -> Result<CoinSpec, String> {
         "nock" => FamilyParams::Nock,
         "xelis" => FamilyParams::Xelis,
         "tari" => FamilyParams::Tari,
+        "groestlcoin" => FamilyParams::Groestlcoin,
         // Unreachable while `TOKEN_GRAMMAR` and this match list the same families — the lookup above
         // already rejected any name the grammar does not carry.  Report it instead of panicking, so a
         // grammar row added without an arm here degrades to a clear message; the
@@ -1968,7 +2026,8 @@ mod tests {
         for spec in COINS {
             let expected = match spec.params {
                 FamilyParams::P2pkh { .. } => Family::P2pkh,
-                FamilyParams::SegwitV0 { .. } => Family::SegwitV0,
+                // Groestlcoin is SegWit v0 with its own base58check hash; see its variant.
+                FamilyParams::SegwitV0 { .. } | FamilyParams::Groestlcoin => Family::SegwitV0,
                 FamilyParams::Taproot { .. } => Family::Taproot,
                 FamilyParams::Ethereum => Family::Ethereum,
                 FamilyParams::CryptoNote { .. } => Family::CryptoNote,

@@ -253,6 +253,12 @@ fn leading_characters(spec: &coins::CoinSpec) -> Leading {
         coins::FamilyParams::SegwitV0 { hrp, .. } => {
             Leading::Forced(format!("{hrp}1{}", bech32::CHARSET[0] as char))
         }
+        // Groestlcoin's default form is bech32 P2WPKH under its HRP, for the same reason.
+        coins::FamilyParams::Groestlcoin => Leading::Forced(format!(
+            "{}1{}",
+            coins::GROESTLCOIN_HRP,
+            bech32::CHARSET[0] as char
+        )),
         coins::FamilyParams::Taproot { hrp, .. } => {
             Leading::Forced(format!("{hrp}1{}", bech32::CHARSET[1] as char))
         }

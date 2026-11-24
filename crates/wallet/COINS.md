@@ -14,7 +14,7 @@ Run `forager-wallet list` for the live table — this file documents it, and a t
 | Family | Encoding | Curve |
 |---|---|---|
 | Taproot | bech32m, witness v1, BIP340/341/350 key-path | secp256k1 |
-| SegWit v0 | bech32, witness v0 P2WPKH | secp256k1 |
+| SegWit v0 | bech32, witness v0 P2WPKH (Groestlcoin: legacy form and WIF under a double-Groestl-512 base58check) | secp256k1 |
 | P2PKH | base58check(version ‖ HASH160(pubkey)) | secp256k1 |
 | Ethereum | EIP-55 checksummed keccak160 of the uncompressed pubkey | secp256k1 |
 | CryptoNote | dual spend/view keys, varint network prefix, 25-word seed | ed25519 |
@@ -63,6 +63,7 @@ may carry exactly one of two markers, and a marker is the only way a row can cla
 | `kcn` | Kylacoin | SegWit v0 | `kc1q…` | `m/84'/942'` |
 | `rin` | Rincoin | SegWit v0 | `rin1q…` | `m/84'/9555'` |
 | `lpepe` | LuckyPepe | SegWit v0 | `lpep1q…` | — |
+| `grs` | Groestlcoin | SegWit v0 | `grs1q…` | `m/84'/17'` |
 | `doge` | Dogecoin | P2PKH | `D…` | `m/44'/3'` |
 | `rvn` | Ravencoin | P2PKH | `R…` | `m/44'/175'` |
 | `firo` | Firo | P2PKH | `a…` (most keys) | `m/44'/136'` |
@@ -218,6 +219,20 @@ These rows need a word of explanation:
   (two seeds: words, entropy, both keys, both address forms) were produced by running that code,
   and words this tool enciphers were decoded by its `CipherSeed::from_mnemonic`. **Not checked:**
   a restore in a Tari wallet app and a pool payout.
+- **`grs`** — Groestlcoin. HASH160 and bech32 are Bitcoin's, so the default `grs1q…` address is
+  the Bitcoin construction under the HRP `grs`. Groestlcoin changed base58check itself: the
+  checksum is the first four bytes of `Groestl512(Groestl512(payload))`, not double SHA-256, so the
+  `--legacy` address (version 36, `F…`) and the WIF (byte 128) differ from Bitcoin's in their last
+  characters, and a Bitcoin WIF for the same key is refused by `restore`. `--testnet` gives
+  `tgrs1q…`, version 111 and WIF byte 239. `--hd` derives at `m/84'/17'`, the path Groestlcoin
+  Core's descriptor wallet uses; `--purpose bip44` gives the `F…` form at `m/44'/17'`, and no
+  Taproot form is offered. Import the WIF with Groestlcoin Core's `importprivkey` or into
+  Electrum-GRS. Source: `Groestlcoin/groestlcoin@17a57752` (MIT), `src/kernel/chainparams.cpp`,
+  `src/base58.cpp`, `src/groestlcoin.h`, `src/groestlcoin-hash.cpp` and
+  `src/wallet/walletutil.cpp`. The known-answer vectors are the `groestlcoinjs-lib` fixtures for
+  two keys, and a recent coinbase payee (`Fr5m2irs…`, block 6355250) decodes under the row's
+  version byte and checksum. **Not checked:** an import into a Groestlcoin wallet and a pool
+  payout.
 - **`firo`** — one of the two `(most keys)` rows. Version byte `0x52` puts the 25-byte payload
   astride the base58 boundary between digit 32 (`Z`) and digit 33 (`a`): the interval the payload
   can occupy lies 1.222% below that boundary and 98.778% above it, so 98.8% of keys render `a…` and
@@ -231,7 +246,7 @@ These rows need a word of explanation:
   every possible key.
 
 **Testnet.** `--testnet` works where the coin defines one. `--legacy` renders the base58 form for a
-SegWit-default coin (`btc`, `ltc`, `vtc`, `qtc`, `kcn`, `rin`, `lpepe`, `scash`, `alpha`).
+SegWit-default coin (`btc`, `ltc`, `vtc`, `qtc`, `kcn`, `rin`, `lpepe`, `grs`, `scash`, `alpha`).
 
 **Evrmore has no SLIP-44 coin type, so it has no `--hd` path.** Evrmore is a Ravencoin fork that
 changed only the address version byte (33, rendering `E…`) and kept Ravencoin's WIF byte. SLIP-44
@@ -358,7 +373,7 @@ A token sets **bytes, not hashes.** `p2pkh:` always hashes the pubkey with Bitco
 checksums with Bitcoin's SHA256d — right for a Bitcoin-derived chain, wrong for Groestlcoin, whose
 base58check checksum is a double Groestl-512 (`Groestlcoin/groestlcoin`, `src/groestlcoin-hash.cpp`
 and `src/hash.h`). That substitution sits *inside* base58check, below the address layer, so the WIF
-comes out as wrong as the address and no `ver=` repairs either. Decred is not expressible at all: it
+comes out as wrong as the address and no `ver=` repairs either. Use the `grs` row instead. Decred is not expressible at all: it
 hashes with BLAKE-256 and its address version is two bytes where `ver=` takes one (`decred/dcrd`,
 `dcrutil/hash160.go`, `chaincfg/chainhash/hashfuncs.go`, `chaincfg/mainnetparams.go`). The `segwit:`
 token's `--legacy` form and its WIF inherit the same assumption.
@@ -383,6 +398,7 @@ token's `--legacy` form and its WIF inherit the same assumption.
 --coin nock:
 --coin xelis:
 --coin tari:
+--coin groestlcoin:
 ```
 
 Integers are decimal or `0x`-prefixed hex. An unrecognised parameter is rejected rather than

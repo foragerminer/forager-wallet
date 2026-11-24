@@ -9,7 +9,7 @@ Crates offered under `MIT OR Apache-2.0` are used here under **Apache-2.0**, who
 is in [`LICENSE`](LICENSE) at the repository root. Their MIT text is still reproduced where the
 crate ships one, so the notice is preserved either way.
 
-Generated from `cargo metadata`. 88 third-party packages.
+Generated from `cargo metadata`. 89 third-party packages.
 
 ## Summary
 
@@ -53,6 +53,7 @@ Generated from `cargo metadata`. 88 third-party packages.
 | `find-msvc-tools` | 0.1.15 | MIT OR Apache-2.0 |
 | `generic-array` | 0.14.7 | MIT |
 | `getrandom` | 0.4.3 | MIT OR Apache-2.0 |
+| `groestl` | 0.11.0 | MIT OR Apache-2.0 |
 | `group` | 0.14.0 | MIT/Apache-2.0 |
 | `hmac` | 0.13.0 | MIT OR Apache-2.0 |
 | `hybrid-array` | 0.4.15 | MIT OR Apache-2.0 |
@@ -1471,6 +1472,40 @@ SOFTWARE.
 ```
 Copyright (c) 2018-2026 The rust-random Project Developers
 Copyright (c) 2014 The Rust Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
+### groestl 0.11.0 — MIT OR Apache-2.0
+
+<https://github.com/RustCrypto/hashes>
+
+`LICENSE-MIT`:
+
+```
+Copyright (c) 2020-2026 The RustCrypto Project Developers
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated

@@ -173,6 +173,34 @@ fn xel_testnet_differs_from_mainnet_only_in_hrp_and_checksum() {
     assert_eq!(body(&main.address), body(&test.address));
 }
 
+/// Groestlcoin testnet: HRP `tgrs`, P2PKH version 111 and WIF 239 (`Groestlcoin/groestlcoin@17a57752`
+/// `src/kernel/chainparams.cpp` L267-L273), all three under the double-Groestl-512 base58check.
+/// The strings come from a from-scratch Python oracle whose Groestl is the C `groestlcoin_hash`
+/// module; it reproduced the mainnet `groestlcoinjs-lib` fixtures first. The bech32 body is
+/// BIP-173's witness program, so only the HRP and checksum differ from Bitcoin's testnet form.
+#[test]
+fn grs_testnet_uses_tgrs_version_111_and_wif_239() {
+    let seg = address_from_secret("grs", PRIV1, Network::Testnet).unwrap();
+    assert_eq!(seg.address, "tgrs1qw508d6qejxtdg4y5r3zarvary0c5xw7kxykep7");
+    assert_eq!(&seg.address[5..seg.address.len() - 6], WITNESS_BODY);
+    let legacy = address_from_secret_kind("grs", PRIV1, Network::Testnet, true).unwrap();
+    assert_eq!(legacy.address, "mrCDrCybB6J1vRfbwM5hemdJz73FuCDVWf");
+    assert_eq!(
+        legacy.secret_std,
+        forager_wallet::SecretStd::Wif(
+            "cMahea7zqjxrtgAbB7LSGbcQUr1uX1ojuat9jZodMN87JcdXxF3p".to_string()
+        )
+    );
+    // The testnet WIF reads back to the same key.
+    let again = address_from_secret(
+        "grs",
+        "cMahea7zqjxrtgAbB7LSGbcQUr1uX1ojuat9jZodMN87JcdXxF3p",
+        Network::Testnet,
+    )
+    .unwrap();
+    assert_eq!(again.address, seg.address);
+}
+
 /// Whether a row declares any testnet-specific parameter at all.
 ///
 /// Ergo, Alephium and XDAG are excluded by construction: their families take no `Option` testnet
@@ -193,7 +221,10 @@ fn declares_testnet(params: &coins::FamilyParams) -> bool {
         // Conflux's testnet prefix is not an `Option`: CIP-37 gives every network a prefix, and a
         // row has to name both, so there is always a testnet value to check. Xelis's testnet HRP
         // is a protocol constant (`XELIS_HRP_TESTNET`), so the same holds for it.
-        coins::FamilyParams::Conflux { .. } | coins::FamilyParams::Xelis => true,
+        // Groestlcoin's testnet HRP, version and WIF bytes are protocol constants too.
+        coins::FamilyParams::Conflux { .. }
+        | coins::FamilyParams::Xelis
+        | coins::FamilyParams::Groestlcoin => true,
         coins::FamilyParams::CryptoNote {
             network_byte_testnet,
             ..
@@ -217,7 +248,7 @@ fn declares_testnet(params: &coins::FamilyParams) -> bool {
 /// a testnet KAT for the new row — not something to update reflexively.
 ///
 /// Where each row's testnet output is pinned today:
-/// * `btc`, `ltc`, `scash`, `alpha`, `rvn`, `doge`, `kad`, `xel` — this file.
+/// * `btc`, `ltc`, `scash`, `alpha`, `rvn`, `doge`, `kad`, `xel`, `grs` — this file.
 /// * `xmr` — `families::cryptonote::tests::monero_testnet_address_uses_network_byte_53`.
 /// * `pearl`, `vtc`, `firo`, `mewc`, `evr`, `cfx`, `kas`, `kls`, `spr` — their per-coin tests in
 ///   `lib.rs`.
@@ -231,8 +262,8 @@ fn every_row_declaring_a_testnet_variant_has_a_testnet_kat() {
     assert_eq!(
         declared,
         [
-            "pearl", "btc", "ltc", "vtc", "doge", "rvn", "firo", "mewc", "evr", "kad", "cfx",
-            "xmr", "kas", "kls", "spr", "xel", "scash", "alpha"
+            "pearl", "btc", "ltc", "vtc", "grs", "doge", "rvn", "firo", "mewc", "evr", "kad",
+            "cfx", "xmr", "kas", "kls", "spr", "xel", "scash", "alpha"
         ]
     );
     // Every one of them must actually mint on testnet rather than error — the cheap half of the

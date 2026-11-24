@@ -644,6 +644,55 @@ fn source_verified_segwit_rows_bip84_bip86_vectors() {
     }
 }
 
+/// Groestlcoin at SLIP-44 17, BIP84 (its native purpose, the path Groestlcoin Core's descriptor
+/// wallet uses: `Groestlcoin/groestlcoin@17a57752` `src/wallet/walletutil.cpp` L56, L75) and BIP44.
+/// The WIF and the `F…` address carry the double-Groestl-512 checksum. Expected values come from a
+/// from-scratch Python oracle (BIP32, secp256k1, bech32, with Groestl from the C
+/// `groestlcoin_hash` module) that first reproduced the BIP84 spec vector and the
+/// `groestlcoinjs-lib` private-key-1 fixtures. Index 1 is asserted too, through the same mnemonic.
+#[test]
+fn grs_bip84_and_bip44_vectors() {
+    for (purpose, index, addr, wif) in [
+        (
+            hd::Purpose::Bip84,
+            0,
+            "grs1qza0fp7c2k4r8lqsxvz97fa0yfv247qq2lrmssp",
+            "L4Sn2vaxTtRDYa1YSSeArgH2idH2YRhRdPRuajHbevTLGgwFMoS4",
+        ),
+        (
+            hd::Purpose::Bip84,
+            1,
+            "grs1qpuehxxhkpvpk25pedvp9w0evak2xt7gync83pu",
+            "L3FAnXMMfZoKBDnrX1kj6tkNTSChu6wvJBm3dDpf1J7CzBmbSBEK",
+        ),
+        (
+            hd::Purpose::Bip44,
+            0,
+            "FejEey9oUiHDzTKvhYmWirmwJrHe9XshNT",
+            "L1Wg2Vz9zAmeTD52U8PGkibZ7jb3LhYSuGtBdmKosuLezPKeKVkH",
+        ),
+    ] {
+        let coin = hd::lookup("grs").expect("grs is HD-capable");
+        let acct = hd::derive(ABANDON, "", coin, purpose, 0, index).unwrap();
+        assert_eq!(
+            acct.path,
+            format!("m/{}'/17'/0'/0/{index}", purpose.number())
+        );
+        assert_eq!(acct.address, addr, "grs {purpose} {index}");
+        assert_eq!(acct.secret_str(), wif, "grs {purpose} {index}");
+    }
+    // The 12-word phrase BIP84 publishes against, at m/84'/17'/0'/0/0.
+    let coin = hd::lookup("grs").unwrap();
+    let acct = hd::derive(ABANDON_12, "", coin, hd::Purpose::Bip84, 0, 0).unwrap();
+    assert_eq!(acct.address, "grs1qrm2uggqj846nljryvmuga56vtwfey0dtnc4z55");
+    assert_eq!(
+        acct.secret_str(),
+        "L4mSsRa7DVFMez7MxcL9cV5ZxeKdMJpJmqJtdcGDz9oJM6sQsNz2"
+    );
+    // No Taproot form is offered for Groestlcoin.
+    assert!(hd::derive(ABANDON, "", coin, hd::Purpose::Bip86, 0, 0).is_err());
+}
+
 // BIP86 — Taproot key-path at m/86'. The oracle's Taproot tweak was anchored against this crate's
 // own `KAT_PRL` / `KAT_TPRL` pearl vectors before these values were derived.
 #[test]
@@ -725,6 +774,7 @@ fn native_purpose_matches_single_key_address_type() {
         ("btc", hd::Purpose::Bip84),
         ("ltc", hd::Purpose::Bip84),
         ("vtc", hd::Purpose::Bip84),
+        ("grs", hd::Purpose::Bip84),
         ("doge", hd::Purpose::Bip44),
         ("firo", hd::Purpose::Bip44),
         ("eth", hd::Purpose::Bip44),

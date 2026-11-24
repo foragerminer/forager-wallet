@@ -5,7 +5,7 @@
 //! (a valid-but-unrecognized address must still run).
 //!
 //! Detection is checksum-verified wherever the scheme has a checksum at all — base58check
-//! double-SHA256, bech32/bech32m polymod, the CashAddr polymod for the Kaspa family, Blake2b-256
+//! double-SHA256 (double Groestl-512 for Groestlcoin), bech32/bech32m polymod, the CashAddr polymod for the Kaspa family, Blake2b-256
 //! for Ergo, Keccak-256 for CryptoNote and for Ethereum's EIP-55 — so a corrupted address is not
 //! answered confidently.
 //!
@@ -26,7 +26,8 @@ use sha2::{Digest, Sha256};
 
 use crate::codec::{base58, bech32, cashaddr, conflux, cryptonote, nock, tari};
 use crate::coins::{
-    Family, FamilyParams, COINS, EPICBOX_VERSION, NOID_ADDRESS_LEN, NOID_HRP, QUANTUS_SS58_PREFIX,
+    Family, FamilyParams, COINS, EPICBOX_VERSION, GROESTLCOIN_HRP, GROESTLCOIN_P2PKH_VERSION,
+    GROESTLCOIN_P2PKH_VERSION_TESTNET, NOID_ADDRESS_LEN, NOID_HRP, QUANTUS_SS58_PREFIX,
     TARI_NETWORK_MAINNET, XELIS_HRP, XELIS_HRP_TESTNET, XELIS_SEPARATOR,
 };
 
@@ -212,6 +213,12 @@ pub fn detect_family(addr: &str) -> Option<Family> {
             if payload.len() == HASH160_LEN {
                 return Some(Family::Xdag);
             }
+        }
+
+        // 4a'. Groestlcoin P2PKH: `version ‖ hash160` under a double-Groestl-512 checksum. See
+        //      [`groestlcoin_p2pkh`].
+        if groestlcoin_p2pkh(&raw) {
+            return Some(Family::P2pkh);
         }
 
         // 4b. Ergo P2PK: `Base58(prefix ‖ compressed_pubkey(33) ‖ Blake2b256(prefix ‖ pubkey)[..4])`
@@ -583,7 +590,24 @@ fn cryptonote_tag(nb: u64) -> (String, usize) {
 fn hrp_is_modelled(hrp: &str) -> bool {
     COINS.iter().any(|c| match c.params {
         FamilyParams::SegwitV0 { hrp: h, .. } | FamilyParams::Taproot { hrp: h, .. } => h == hrp,
+        FamilyParams::Groestlcoin => hrp == GROESTLCOIN_HRP,
         _ => false,
+    })
+}
+
+/// Whether `raw` (an already-base58-decoded string) is a Groestlcoin P2PKH address: a 21-byte
+/// payload `version ‖ hash160` with the mainnet or testnet version byte, followed by
+/// `Groestl512(Groestl512(payload))[..4]`.
+///
+/// Source: `Groestlcoin/groestlcoin@17a57752` `src/base58.cpp` (`DecodeBase58Check` through
+/// `XCoin::HashForAddress`) and `src/kernel/chainparams.cpp` (`PUBKEY_ADDRESS` 36 and 111). The
+/// checksum is what separates this from the SHA256d arm above: no string verifies under both
+/// except by a 2^-32 accident. Detection answers [`Family::P2pkh`], the family, as it does for
+/// every base58 P2PKH coin.
+fn groestlcoin_p2pkh(raw: &[u8]) -> bool {
+    base58::verify_check_groestl(raw).is_some_and(|payload| {
+        payload.len() == 1 + HASH160_LEN
+            && [GROESTLCOIN_P2PKH_VERSION, GROESTLCOIN_P2PKH_VERSION_TESTNET].contains(&payload[0])
     })
 }
 
@@ -873,6 +897,9 @@ mod tests {
             // Parallax: miner of blocks 65722-65726, explorer.parallaxprotocol.org. Mixed case, so
             // the EIP-55 checksum is verified.
             ("plx", "0x38432a328b3c6f15582292f7235F17b08A98C6AB", "parallax 65726"),
+            // Groestlcoin: coinbase payee of blocks 6355180-6355250 (every tenth block read),
+            // groestlsight.groestlcoin.org/api. The checksum is double Groestl-512.
+            ("grs", "Fr5m2irs9vNWSAFXJK6KPtxqW9YWg384FX", "groestlsight 6355250"),
             // Opacra: DEV_FUND_ADDRESS, opacra/opacra@66380059 src/cryptonote_config.h, also
             // shown on explorer.opacra.org.
             (
@@ -928,6 +955,17 @@ mod tests {
                 }
                 FamilyParams::Ethereum => {
                     assert_eq!(detected, Some(Family::Ethereum), "{ticker} {addr}");
+                }
+                FamilyParams::Groestlcoin => {
+                    assert_eq!(base58::decode_check(addr), None, "{ticker} {addr}: SHA256d");
+                    let payload = base58::decode_check_groestl(addr)
+                        .unwrap_or_else(|| panic!("{ticker} {addr} ({src}): bad checksum"));
+                    assert_eq!(payload.len(), 1 + HASH160_LEN, "{ticker} {addr}");
+                    assert_eq!(
+                        payload[0], GROESTLCOIN_P2PKH_VERSION,
+                        "{ticker} {addr} ({src})"
+                    );
+                    assert_eq!(detected, Some(Family::P2pkh), "{ticker} {addr}");
                 }
                 _ => panic!("{ticker}: no live-address rule for this family"),
             }
@@ -2129,5 +2167,41 @@ mod tests {
                 expected: Family::CryptoNote
             }
         ));
+    }
+
+    /// Groestlcoin's two forms, from the `groestlcoinjs-lib` fixtures for private key 1 and
+    /// `2bfe58ab…f69a3e` (`test/fixtures/address.json`, `p2wpkh.json`): the bech32 form is SegWit
+    /// v0 under HRP `grs`, the base58 form is P2PKH under the Groestl checksum. A testnet base58
+    /// address (version 111) is P2PKH too. Every single-character substitution of the base58 form
+    /// fails both checksums, so none is answered P2PKH.
+    #[test]
+    fn detects_groestlcoin_both_forms() {
+        for a in [
+            "grs1qw508d6qejxtdg4y5r3zarvary0c5xw7k3k4sj5",
+            "grs1qu89g059an9axesxp23ke8narm5g0t9vxd5uetv",
+        ] {
+            assert_eq!(detect_family(a), Some(Family::SegwitV0), "{a}");
+        }
+        for a in [
+            "Ffqz14cyvZYJavD76t6oHNDJnGiWcZMVxR",
+            "Fqkb79441DFz6Tj95CkATJP9qYAwPic4Ps",
+            "mrCDrCybB6J1vRfbwM5hemdJz73FuCDVWf",
+        ] {
+            assert_eq!(detect_family(a), Some(Family::P2pkh), "{a}");
+            assert_eq!(check(a, Family::SegwitV0), Verdict::Ok, "{a}");
+        }
+        let a = "Ffqz14cyvZYJavD76t6oHNDJnGiWcZMVxR";
+        for pos in 0..a.len() {
+            let mut bad = a.as_bytes().to_vec();
+            bad[pos] = if bad[pos] == b'2' { b'3' } else { b'2' };
+            let bad = String::from_utf8(bad).unwrap();
+            assert_ne!(detect_family(&bad), Some(Family::P2pkh), "{bad}");
+        }
+        // The Bitcoin-checksummed spelling of the same `36 ‖ hash160` is not a Groestlcoin address
+        // and no modelled row carries version 36, so it is not P2PKH either.
+        let hash160 = crate::hexbytes::decode("751e76e8199196d454941c45d1b3a323f1433bd6").unwrap();
+        let mut payload = vec![GROESTLCOIN_P2PKH_VERSION];
+        payload.extend_from_slice(&hash160);
+        assert_eq!(detect_family(&base58::encode_check(&payload)), None);
     }
 }

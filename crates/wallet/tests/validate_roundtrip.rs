@@ -777,3 +777,41 @@ fn every_generated_source_verified_row_round_trips_through_detection() {
         }
     }
 }
+
+/// Every Groestlcoin address the generator emits round-trips through detection in both forms
+/// (the base58 form on both networks): the bech32 form as SegWit v0, the base58 form (double-Groestl-512 checksum) as
+/// P2PKH. No single-character corruption of the base58 form is answered P2PKH, and the SHA256d
+/// checksum never verifies one.
+#[test]
+fn every_generated_groestlcoin_address_round_trips_through_detection() {
+    for i in 1u32..=8 {
+        let secret = format!("{i:064x}");
+        for net in [Network::Mainnet, Network::Testnet] {
+            // Detection models mainnet HRPs only, as for every SegWit row (`tb1…` is not modelled
+            // either), so the `tgrs1…` form is checked on mainnet only.
+            let seg = forager_wallet::address_from_secret("grs", &secret, net).unwrap();
+            if net == Network::Mainnet {
+                assert_eq!(detect_family(&seg.address), Some(Family::SegwitV0));
+            }
+            let legacy =
+                forager_wallet::address_from_secret_kind("grs", &secret, net, true).unwrap();
+            assert_eq!(
+                detect_family(&legacy.address),
+                Some(Family::P2pkh),
+                "{}",
+                legacy.address
+            );
+            assert_eq!(check(&legacy.address, Family::SegwitV0), Verdict::Ok);
+            assert_eq!(
+                forager_addr::codec::base58::decode_check(&legacy.address),
+                None
+            );
+            for pos in 0..legacy.address.len() {
+                let mut bad = legacy.address.clone().into_bytes();
+                bad[pos] = if bad[pos] == b'2' { b'3' } else { b'2' };
+                let bad = String::from_utf8(bad).unwrap();
+                assert_ne!(detect_family(&bad), Some(Family::P2pkh), "{bad}");
+            }
+        }
+    }
+}

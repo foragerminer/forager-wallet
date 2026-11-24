@@ -254,7 +254,16 @@ pub fn address_from_secret_kind(
         zeroize::Zeroize::zeroize(&mut entropy);
         return Ok(w);
     }
-    let priv32 = parse_secret(secret_hex)?;
+    // A Groestlcoin WIF carries a double-Groestl-512 checksum, so the SHA256d WIF reader in
+    // `parse_secret` cannot read it, and a Bitcoin WIF is refused rather than guessed at.
+    let priv32 = if matches!(spec.params, coins::FamilyParams::Groestlcoin) {
+        let s = secret_hex.trim();
+        hexbytes::decode_n::<32>(s)
+            .or_else(|| families::groestlcoin::from_wif(s))
+            .ok_or(WalletError::BadPrivKeyHex)?
+    } else {
+        parse_secret(secret_hex)?
+    };
     let d = curves::secp256k1::scalar_in_range(&priv32)?;
     build_wallet(&spec, &d, &priv32, net, legacy)
 }
@@ -565,6 +574,17 @@ pub(crate) fn dispatch(
             return Ok((
                 addr,
                 SecretStd::Wif(secret::wif(priv32, wif, true)),
+                *priv32,
+            ));
+        }
+        // Groestlcoin: SegWit v0 with Bitcoin's bytes replaced by its own and base58check's
+        // SHA256d replaced by double Groestl-512, in the legacy address and the WIF alike. Testnet
+        // has its own HRP, version and WIF bytes.
+        coins::FamilyParams::Groestlcoin => {
+            let testnet = net == Network::Testnet;
+            return Ok((
+                families::groestlcoin::address(d, testnet, legacy),
+                SecretStd::Wif(families::groestlcoin::wif(priv32, testnet)),
                 *priv32,
             ));
         }
@@ -921,6 +941,7 @@ mod tests {
             ("noid:", "noid"),
             ("quantus:", "quan"),
             ("xelis:", "xel"),
+            ("groestlcoin:", "grs"),
         ] {
             let t = address_from_secret(token, PRIV1, Network::Mainnet).unwrap();
             let r = address_from_secret(ticker, PRIV1, Network::Mainnet).unwrap();
@@ -1795,6 +1816,50 @@ mod tests {
             g.address
         );
         assert_eq!(detect_family(&g.address), Some(Family::Tari));
+    }
+
+    /// Groestlcoin through the public seam: the `groestlcoinjs-lib` private-key-1 and
+    /// `2bfe58ab…` fixtures in both address forms, the Groestl WIF read back, a Bitcoin WIF
+    /// refused, and a generated key round-tripping through detection.
+    #[test]
+    fn groestlcoin_through_the_public_seam() {
+        for (key, wif, p2pkh, p2wpkh) in families::groestlcoin::tests::MAINNET {
+            let w = address_from_secret("grs", key, Network::Mainnet).unwrap();
+            assert_eq!(w.address, p2wpkh);
+            assert_eq!(w.secret_std, SecretStd::Wif(wif.to_string()));
+            assert_eq!(w.secret_hex, key);
+            let l = address_from_secret_kind("grs", key, Network::Mainnet, true).unwrap();
+            assert_eq!(l.address, p2pkh);
+            assert_eq!(
+                address_from_secret_kind("grs", wif, Network::Mainnet, true)
+                    .unwrap()
+                    .address,
+                p2pkh
+            );
+            assert_eq!(detect_family(p2wpkh), Some(Family::SegwitV0));
+            assert_eq!(detect_family(p2pkh), Some(Family::P2pkh));
+        }
+        // A Bitcoin WIF for key 1 checksums with SHA256d and is not a Groestlcoin secret.
+        assert_eq!(
+            address_from_secret(
+                "grs",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+                Network::Mainnet
+            )
+            .err(),
+            Some(WalletError::BadPrivKeyHex)
+        );
+        let g = generate("grs", Network::Mainnet).unwrap();
+        assert!(g.address.starts_with("grs1q"), "{}", g.address);
+        let SecretStd::Wif(wif) = &g.secret_std else {
+            panic!("a Groestlcoin wallet prints a WIF")
+        };
+        assert_eq!(
+            address_from_secret("grs", wif, Network::Mainnet)
+                .unwrap()
+                .address,
+            g.address
+        );
     }
 
     /// Xelis through the public seam: vector 1 of `families::xelis` (private key 1, little-endian),

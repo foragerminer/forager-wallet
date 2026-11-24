@@ -42,17 +42,41 @@ pub fn encode(input: &[u8]) -> String {
 
 /// Base58**check**: `BASE58(payload ‖ SHA256d(payload)[..4])`.
 ///
-/// The checksum hash is Bitcoin's and is not a parameter — every coin in [`crate::coins::COINS`]
-/// keeps it, and so does everything a `p2pkh:`/`segwit:` coin token can express. It is a real
-/// per-chain choice, though, not a property of base58check: Groestlcoin patched this very step to
-/// double-Groestl-512 (`Groestlcoin/groestlcoin` `src/base58.cpp` → `XCoin::HashForAddress`), and
-/// Decred's base58check is double-BLAKE-256 (`decred/base58` `base58check.go`). Addresses *and*
-/// WIFs for those chains are outside what this encoder can mint; see [`crate::coins::FamilyParams`]
-/// for the citations and the warning the CLI prints.
+/// The checksum hash is Bitcoin's and is not a parameter — every coin row but one keeps it, and so
+/// does everything a `p2pkh:`/`segwit:` coin token can express. It is a real per-chain choice,
+/// though, not a property of base58check: Groestlcoin patched this very step to double Groestl-512
+/// (`Groestlcoin/groestlcoin` `src/base58.cpp` → `XCoin::HashForAddress`), which
+/// [`encode_check_groestl`] implements for the `grs` row, and Decred's base58check is
+/// double-BLAKE-256 (`decred/base58` `base58check.go`), which nothing here mints. See
+/// [`crate::coins::FamilyParams`] for the citations and the warning the CLI prints.
 pub fn encode_check(payload: &[u8]) -> String {
     let mut v = payload.to_vec();
     v.extend_from_slice(&crate::hash::double_sha256(payload)[..4]);
     encode(&v)
+}
+
+/// Groestlcoin's base58check: `BASE58(payload ‖ Groestl512(Groestl512(payload))[..4])`, for its
+/// P2PKH addresses and its WIF alike. Source: `Groestlcoin/groestlcoin@17a57752` `src/base58.cpp`
+/// (`EncodeBase58Check`, `DecodeBase58Check`, both through `XCoin::HashForAddress`).
+pub fn encode_check_groestl(payload: &[u8]) -> String {
+    let mut v = payload.to_vec();
+    v.extend_from_slice(&crate::hash::double_groestl512(payload)[..4]);
+    encode(&v)
+}
+
+/// [`verify_check`] under Groestlcoin's checksum: verify the trailing four bytes against
+/// `Groestl512(Groestl512(payload))[..4]` and return the payload without them.
+pub fn verify_check_groestl(raw: &[u8]) -> Option<&[u8]> {
+    if raw.len() < 5 {
+        return None;
+    }
+    let (payload, checksum) = raw.split_at(raw.len() - 4);
+    (crate::hash::double_groestl512(payload)[..4] == *checksum).then_some(payload)
+}
+
+/// [`decode_check`] under Groestlcoin's checksum.
+pub fn decode_check_groestl(s: &str) -> Option<Vec<u8>> {
+    Some(verify_check_groestl(&decode(s)?)?.to_vec())
 }
 
 /// Decode a base58 string to bytes (no checksum). `None` on any non-alphabet character, or on an
@@ -127,9 +151,10 @@ mod tests {
     /// accepts what the encoder wrote.
     ///
     /// Nothing in the coin table selects this hash, so nothing else would fail if it changed. A
-    /// chain that uses a different one (Groestlcoin, Decred) is unsupported by construction, and
-    /// the `p2pkh:` coin token's caveat says so — swapping the primitive here without updating
-    /// that text is what this test exists to stop.
+    /// chain that uses a different one cannot be reached through it: Groestlcoin has its own
+    /// encoder ([`super::encode_check_groestl`]) and its own row, Decred is unsupported, and the
+    /// `p2pkh:` coin token's caveat says so. Swapping the primitive here without updating that
+    /// text is what this test exists to stop.
     #[test]
     fn base58check_checksum_is_the_first_four_bytes_of_double_sha256() {
         use super::{decode, verify_check};
@@ -166,5 +191,34 @@ mod tests {
         bad[addr.len() - 1] = if bad[addr.len() - 1] == 'A' { 'B' } else { 'A' };
         let bad: String = bad.into_iter().collect();
         assert_eq!(decode_check(&bad), None);
+    }
+
+    /// Groestlcoin's base58check, against the `groestlcoinjs-lib` fixtures (`test/fixtures/
+    /// ecpair.json`, `address.json`) for private key 1: version 36 ‖ HASH160 and the WIF payload
+    /// `0x80 ‖ key ‖ 0x01`. Both strings differ from Bitcoin's only in the checksum characters,
+    /// and neither verifies under the SHA256d checksum.
+    #[test]
+    fn groestl_base58check_matches_the_groestlcoinjs_fixtures() {
+        use super::{decode_check, decode_check_groestl, encode_check_groestl};
+        let hash160 = crate::hexbytes::decode("751e76e8199196d454941c45d1b3a323f1433bd6").unwrap();
+        let mut address = vec![36u8];
+        address.extend_from_slice(&hash160);
+        let a = encode_check_groestl(&address);
+        assert_eq!(a, "Ffqz14cyvZYJavD76t6oHNDJnGiWcZMVxR");
+        assert_eq!(decode_check_groestl(&a), Some(address));
+        assert_eq!(decode_check(&a), None);
+
+        let mut wif = vec![0x80u8];
+        wif.extend_from_slice(&[0u8; 31]);
+        wif.extend_from_slice(&[0x01, 0x01]);
+        let w = encode_check_groestl(&wif);
+        assert_eq!(w, "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sX6ptSt");
+        assert_eq!(decode_check_groestl(&w), Some(wif));
+        assert_eq!(decode_check(&w), None);
+        assert_eq!(
+            decode_check_groestl("KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn"),
+            None,
+            "a Bitcoin WIF does not verify under the Groestl checksum"
+        );
     }
 }

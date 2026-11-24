@@ -1,6 +1,6 @@
 # Forager Wallet
 
-**Offline payout-address and key generation for 64 cryptocurrencies.** No pool, no GPU, no network.
+**Offline payout-address and key generation for 65 cryptocurrencies.** No pool, no GPU, no network.
 
 ```sh
 cargo install forager-wallet
@@ -111,13 +111,13 @@ The miner's value is its optimized kernels. This tool's value is that you can re
 
 Key generation is the one thing a user should never run closed-source: a backdoored entropy source
 is undetectable from the outside and would steal every coin ever mined to the resulting address.
-Nothing here is proprietary — BIP32/39/44, secp256k1, Ed25519, bech32/bech32m, base58check,
-CashAddr and EIP-55 are public standards, and the Parano1d, Nockchain, Xelis and Tari address schemes are
+Nothing here is proprietary — BIP32/39/44, secp256k1, Ed25519, bech32/bech32m, base58check
+(with Groestlcoin's Groestl-512 checksum), CashAddr and EIP-55 are public standards, and the Parano1d, Nockchain, Xelis and Tari address schemes are
 open-source reference code — so publishing costs nothing and buys a claim that can actually be verified.
 
 ## Supported coins
 
-64 coins across seventeen address families: Taproot (bech32m), SegWit v0 (bech32), P2PKH
+65 coins across seventeen address families: Taproot (bech32m), SegWit v0 (bech32), P2PKH
 (base58check), Ethereum (EIP-55), CryptoNote/Monero, Kaspa-family (CashAddr), Ergo, Alephium, XDAG,
 Warthog, Epic Cash epicbox, Conflux Core Space (CIP-37), Parano1d, Quantus (SS58), Nockchain
 (base58 of a Tip5 digest), Xelis (bech32 `xel:`) and Tari (base58 dual address). Two curves, secp256k1 and Ed25519, carry all

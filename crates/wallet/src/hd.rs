@@ -116,7 +116,7 @@ impl core::fmt::Display for Purpose {
 /// user the same kind of address, or one of the two is quietly worse than the other.
 pub fn native_purpose(coin: &CoinSpec) -> Option<Purpose> {
     match coin.params {
-        FamilyParams::SegwitV0 { .. } => Some(Purpose::Bip84),
+        FamilyParams::SegwitV0 { .. } | FamilyParams::Groestlcoin => Some(Purpose::Bip84),
         FamilyParams::Taproot { .. } => Some(Purpose::Bip86),
         FamilyParams::P2pkh { .. } | FamilyParams::Ethereum => Some(Purpose::Bip44),
         _ => None,
@@ -133,9 +133,16 @@ pub fn supports(coin: &CoinSpec, purpose: Purpose) -> bool {
     }
     match purpose {
         Purpose::Bip44 => {
-            matches!(coin.params, FamilyParams::Ethereum) || coin.params.p2pkh_parts().is_some()
+            matches!(
+                coin.params,
+                FamilyParams::Ethereum | FamilyParams::Groestlcoin
+            ) || coin.params.p2pkh_parts().is_some()
         }
-        Purpose::Bip84 => matches!(coin.params, FamilyParams::SegwitV0 { .. }),
+        // Groestlcoin has BIP44 and BIP84 forms only: its Taproot path is not offered.
+        Purpose::Bip84 => matches!(
+            coin.params,
+            FamilyParams::SegwitV0 { .. } | FamilyParams::Groestlcoin
+        ),
         Purpose::Bip86 => matches!(
             coin.params,
             FamilyParams::SegwitV0 { .. } | FamilyParams::Taproot { .. }
@@ -363,6 +370,15 @@ pub fn derive(
             families::ethereum::address(&d),
             SecretStd::EthHex(secret::eth_hex(&priv32)),
         ),
+        // Groestlcoin's legacy address and WIF use its double-Groestl-512 base58check.
+        (Purpose::Bip44, FamilyParams::Groestlcoin) => (
+            families::groestlcoin::address_p2pkh(&secp256k1::pubkey_compressed(&d), false),
+            SecretStd::Wif(families::groestlcoin::wif(&priv32, false)),
+        ),
+        (Purpose::Bip84, FamilyParams::Groestlcoin) => (
+            families::groestlcoin::address(&d, false, false),
+            SecretStd::Wif(families::groestlcoin::wif(&priv32, false)),
+        ),
         (Purpose::Bip44, params) => {
             // `supports` already proved this is `Some`.
             let (version, wif_byte) = params.p2pkh_parts().expect("checked by supports");
@@ -436,9 +452,9 @@ mod tests {
         assert_eq!(
             tickers,
             [
-                "btc", "ltc", "vtc", "kcn", "rin", "doge", "rvn", "firo", "mewc", "xvg", "zny",
-                "ytn", "avn", "lcc", "ftc", "btx", "dnr", "scc", "grlc", "etc", "eth", "ubq",
-                "zec", "btg", "kmd", "btcz", "zer", "yec", "zcl", "ltz"
+                "btc", "ltc", "vtc", "kcn", "rin", "grs", "doge", "rvn", "firo", "mewc", "xvg",
+                "zny", "ytn", "avn", "lcc", "ftc", "btx", "dnr", "scc", "grlc", "etc", "eth",
+                "ubq", "zec", "btg", "kmd", "btcz", "zer", "yec", "zcl", "ltz"
             ]
         );
         for c in supported() {

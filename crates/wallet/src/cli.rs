@@ -617,6 +617,19 @@ mod tests {
     }
 
     #[test]
+    fn new_and_restore_groestlcoin() {
+        assert!(run(&argv(&["new", "--coin", "grs"])).is_ok());
+        assert!(run(&argv(&["new", "--coin", "grs", "--legacy"])).is_ok());
+        assert!(run(&argv(&["new", "--coin", "grs", "--testnet"])).is_ok());
+        let wif = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sX6ptSt";
+        assert!(run(&argv(&["restore", wif, "--coin", "grs", "--legacy"])).is_ok());
+        // Bitcoin's WIF for the same key has a SHA256d checksum and is refused.
+        let btc_wif = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn";
+        assert!(run(&argv(&["restore", btc_wif, "--coin", "grs"])).is_err());
+        assert!(run(&argv(&["new", "--hd", "--coin", "grs"])).is_ok());
+    }
+
+    #[test]
     fn new_and_restore_xelis() {
         assert!(run(&argv(&["new", "--coin", "xel"])).is_ok());
         assert!(run(&argv(&["new", "--coin", "xel", "--testnet"])).is_ok());
