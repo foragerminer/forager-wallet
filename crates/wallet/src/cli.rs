@@ -113,14 +113,14 @@ pub fn run(args: &[String]) -> Result<(), CliError> {
         // `restore` re-derives an address you already hold the secret for. With `--mnemonic` it is
         // the HD path; otherwise it takes a single key. `inspect`/`address` are the older names for
         // the single-key form and keep working.
-        // Nockchain derives from a bare BIP39 phrase through its own SLIP-10 variant, not from a
-        // BIP44 path, so it does not go through the HD table.
+        // Nockchain derives from a bare BIP39 phrase through its own SLIP-10 variant, and Tari from
+        // its 24-word CipherSeed, not from a BIP44 path, so neither goes through the HD table.
         Some("restore")
             if args.iter().any(|a| a == "--mnemonic")
                 && coin
                     .as_deref()
                     .and_then(|c| crate::resolve_spec(c).ok())
-                    .is_some_and(|s| s.family() == Family::Nock) =>
+                    .is_some_and(|s| matches!(s.family(), Family::Nock | Family::Tari)) =>
         {
             cmd_restore_phrase(args, coin.as_deref().unwrap_or_default())
         }
@@ -206,6 +206,16 @@ fn cmd_new(coin: &str, net: Network, legacy: bool, testnet: bool) -> Result<(), 
                 println!("    {:2}. {word}", i + 1);
             }
         }
+        SecretStd::TariSeed(phrase) => {
+            println!(
+                "  24-word Tari seed (NOT BIP39). THIS IS YOUR WALLET RESTORE KEY, back it up:"
+            );
+            for (i, word) in phrase.split_whitespace().enumerate() {
+                println!("    {:2}. {word}", i + 1);
+            }
+            println!();
+            println!("  seed entropy hex : {}", w.secret_hex);
+        }
     }
 
     println!();
@@ -264,6 +274,19 @@ fn cmd_new(coin: &str, net: Network, legacy: bool, testnet: bool) -> Result<(), 
         println!("The address scheme matches a quantus-cli known-answer vector, but importing");
         println!("a raw seed into Quantus's own wallet is UNVERIFIED (its mnemonic import");
         println!("cannot produce this seed). Keep the seed and pass only the address to --wallet.");
+    }
+    if crate::resolve_spec(coin).map(|s| s.family()) == Ok(Family::Tari) {
+        println!();
+        println!(
+            "This is the one-sided Tari address, the form a mining payout needs. The 24 words"
+        );
+        println!("are a Tari CipherSeed with no passphrase, not a BIP39 phrase: restore them in");
+        println!("the official Tari wallet's restore-from-seed-words. A Tari wallet may show the");
+        println!("default address, which opens 14 instead of 12 and has the same keys.");
+        println!("Before mining, confirm that its one-sided address matches the address above.");
+        println!(
+            "The entropy hex re-derives the address with `restore`; no Tari wallet imports it."
+        );
     }
     if crate::resolve_spec(coin).map(|s| s.family()) == Ok(Family::Xelis) {
         println!();
@@ -408,11 +431,17 @@ fn cmd_new_hd(args: &[String]) -> Result<(), CliError> {
 fn cmd_restore_phrase(args: &[String], coin: &str) -> Result<(), CliError> {
     if parse_value(args, "--passphrase").is_some() || args.iter().any(|a| a == "--all") {
         return Err(err(
-            "Nockchain restores from the bare phrase: the official wallet uses an empty BIP39              passphrase, and --all is for HD coins",
+            "Nockchain and Tari restore from the bare phrase: their official wallets use no \
+             passphrase here, and --all is for HD coins",
+        ));
+    }
+    if args.iter().any(|a| a == "--testnet") {
+        return Err(err(
+            "restore --mnemonic for Nockchain and Tari prints the mainnet address only",
         ));
     }
     let phrase = parse_value(args, "--mnemonic").ok_or_else(|| {
-        err("usage: forager-wallet restore --mnemonic \"<12/15/18/21/24 words>\" --coin <ticker>")
+        err("usage: forager-wallet restore --mnemonic \"<words>\" --coin <ticker>  (24 words for xtm)")
     })?;
     let w = crate::address_from_mnemonic(coin, phrase).map_err(|e| err(e.to_string()))?;
     println!("{}", w.address);
@@ -490,6 +519,7 @@ fn family_label(family: Family) -> &'static str {
         Family::Quantus => "Quantus (SS58 189, Poseidon2 of ML-DSA-87 key)",
         Family::Nock => "Nockchain (base58 v1 payee hash, Tip5; no checksum)",
         Family::Xelis => "Xelis (bech32 xel:, Ristretto255)",
+        Family::Tari => "Tari (base58 dual address, CipherSeed)",
     }
 }
 
@@ -596,6 +626,37 @@ mod tests {
         // Zero, and a key above the group order, are refused rather than reduced.
         assert!(run(&argv(&["restore", &"00".repeat(32), "--coin", "xel"])).is_err());
         assert!(run(&argv(&["restore", &"11".repeat(32), "--coin", "xel"])).is_err());
+    }
+
+    #[test]
+    fn new_and_restore_tari() {
+        let words = crate::families::tari::tests::VECTORS[0].words;
+        let entropy = crate::families::tari::tests::VECTORS[0].entropy;
+        assert!(run(&argv(&["new", "--coin", "xtm"])).is_ok());
+        assert!(run(&argv(&["new", "--coin", "xtm", "--testnet"])).is_err());
+        assert!(run(&argv(&["restore", "--mnemonic", words, "--coin", "xtm"])).is_ok());
+        assert!(run(&argv(&["restore", entropy, "--coin", "xtm"])).is_ok());
+        // A 64-hex key is not a Tari secret, and the phrase takes no passphrase or testnet.
+        assert!(run(&argv(&["restore", &"11".repeat(32), "--coin", "xtm"])).is_err());
+        assert!(run(&argv(&[
+            "restore",
+            "--mnemonic",
+            words,
+            "--coin",
+            "xtm",
+            "--passphrase",
+            "x"
+        ]))
+        .is_err());
+        assert!(run(&argv(&[
+            "restore",
+            "--mnemonic",
+            words,
+            "--coin",
+            "xtm",
+            "--testnet"
+        ]))
+        .is_err());
     }
 
     #[test]

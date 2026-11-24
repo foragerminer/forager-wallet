@@ -69,6 +69,12 @@ pub enum Family {
     /// the Pedersen blinding generator. Type `0x00` is a normal address (63 characters, `xel:` on
     /// mainnet, `xet:` on testnet); type `0x01` carries extra data after it.
     Xelis,
+    /// Tari (XTM): the dual address `network ‖ features ‖ view key ‖ spend key ‖ [payment id] ‖
+    /// DammSum`, both keys compressed Ristretto255 points, written as three separately base58-encoded
+    /// parts (the network byte, the features byte, the rest). See [`crate::codec::tari`]. A mainnet
+    /// one-sided address is 91 characters and opens `12`; the default (interactive and one-sided)
+    /// form opens `14`.
+    Tari,
 }
 
 /// Human-readable part of a mainnet Xelis address. Source: `xelis-project/xelis-blockchain@db59b5c2`
@@ -82,6 +88,10 @@ pub const XELIS_HRP_TESTNET: &str = "xet";
 /// The character between a Xelis address's HRP and its data: `SEPARATOR` in
 /// `xelis_common/src/crypto/bech32.rs`. BIP173 uses `1`.
 pub const XELIS_SEPARATOR: char = ':';
+
+/// Network byte of a mainnet Tari address: `Network::MainNet.as_byte()` in
+/// `tari-project/tari@ae2296bc` `common/src/configuration/network.rs`. Only mainnet is modelled.
+pub const TARI_NETWORK_MAINNET: u8 = 0x00;
 
 /// SS58 network prefix of a Quantus address: `Ss58AddressFormat::custom(189)` in quantus-cli
 /// `src/cli/address_format.rs`. 189 is above 63, so SS58 spells it as two prefix bytes.
@@ -220,6 +230,9 @@ pub enum FamilyParams {
     /// Xelis has no per-coin parameters: the HRPs are the protocol constants [`XELIS_HRP`] and
     /// [`XELIS_HRP_TESTNET`].
     Xelis,
+    /// Tari has no per-coin parameters: the network byte is the protocol constant
+    /// [`TARI_NETWORK_MAINNET`].
+    Tari,
 }
 
 impl FamilyParams {
@@ -243,6 +256,7 @@ impl FamilyParams {
             FamilyParams::Quantus => Family::Quantus,
             FamilyParams::Nock => Family::Nock,
             FamilyParams::Xelis => Family::Xelis,
+            FamilyParams::Tari => Family::Tari,
         }
     }
 
@@ -1066,6 +1080,19 @@ pub static COINS: &[CoinSpec] = &[
         hd_slip44: None,
         params: FamilyParams::Xelis,
     },
+    // ---- Tari family ----
+    // Tari (XTM): dual address `0x00 ‖ features ‖ view_pk ‖ spend_pk ‖ DammSum`, base58 in three
+    // parts. The keys come from a 24-word CipherSeed: Argon2d/ChaCha20 around 16 bytes of entropy,
+    // and each private key is a Blake2b-512 domain-separated hash of that entropy, reduced modulo
+    // the Ristretto255 group order. Source: tari-project/tari@ae2296bc (BSD-3-Clause)
+    // base_layer/common_types/src/{tari_address, dammsum.rs, seeds} and
+    // base_layer/transaction_components/src/key_manager/wallet_types.rs.
+    CoinSpec {
+        ticker: "xtm",
+        name: "Tari",
+        hd_slip44: None,
+        params: FamilyParams::Tari,
+    },
     // SCASH ("Satoshi Cash", RandomX): address bytes left BYTE-IDENTICAL to Bitcoin — P2PKH
     // 0x00, WIF 0x80, bech32 HRP "bc"; testnet 0x6f/"tb". So a SCASH address is indistinguishable
     // from a BTC one (same encoder, same bytes).  Source: scashnetwork/scash (MIT),
@@ -1424,6 +1451,14 @@ pub static TOKEN_GRAMMAR: &[TokenSyntax] = &[
         example: "xelis:",
         caveat: None,
     },
+    TokenSyntax {
+        family: "tari",
+        keys: &[],
+        flags: &[],
+        syntax: "tari:",
+        example: "tari:",
+        caveat: None,
+    },
 ];
 
 /// The [`TokenSyntax::caveat`] for a runtime coin token's family, or `None` if it has none.
@@ -1553,6 +1588,7 @@ pub fn parse_token(token: &str) -> Result<CoinSpec, String> {
         "quantus" => FamilyParams::Quantus,
         "nock" => FamilyParams::Nock,
         "xelis" => FamilyParams::Xelis,
+        "tari" => FamilyParams::Tari,
         // Unreachable while `TOKEN_GRAMMAR` and this match list the same families — the lookup above
         // already rejected any name the grammar does not carry.  Report it instead of panicking, so a
         // grammar row added without an arm here degrades to a clear message; the
@@ -1947,6 +1983,7 @@ mod tests {
                 FamilyParams::Quantus => Family::Quantus,
                 FamilyParams::Nock => Family::Nock,
                 FamilyParams::Xelis => Family::Xelis,
+                FamilyParams::Tari => Family::Tari,
             };
             assert_eq!(spec.family(), expected, "{}", spec.ticker);
         }

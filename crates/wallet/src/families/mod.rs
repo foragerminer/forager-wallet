@@ -9,6 +9,7 @@ pub(crate) mod noid;
 pub mod p2pkh;
 pub(crate) mod quantus;
 pub(crate) mod segwitv0;
+pub(crate) mod tari;
 pub(crate) mod warthog;
 pub(crate) mod xdag;
 pub(crate) mod xelis;

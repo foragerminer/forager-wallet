@@ -98,6 +98,11 @@ pub enum SecretStd {
     /// it, space-separated. The 64-char hex [`Wallet::secret_hex`] is the master secret key it
     /// derives, which the official wallet cannot import on its own.
     Mnemonic(String),
+    /// A Tari CipherSeed: 24 words from the English list, space-separated. **Not BIP39**: the
+    /// words encipher the seed's birthday, entropy and MAC, and only Tari wallets read them. The
+    /// 32-char hex [`Wallet::secret_hex`] is the seed's 16 bytes of entropy, which alone fix the
+    /// keys but which the official wallet cannot import.
+    TariSeed(String),
 }
 
 /// A generated or derived payout wallet.
@@ -132,6 +137,8 @@ pub enum WalletError {
     BadCoinToken(String),
     /// A BIP39 phrase was rejected (carries the specific word, position or count).
     BadMnemonic(String),
+    /// A Tari secret was not 32 hex characters (the CipherSeed's 16 bytes of entropy).
+    BadTariEntropy,
 }
 
 impl std::fmt::Display for WalletError {
@@ -150,6 +157,10 @@ impl std::fmt::Display for WalletError {
             }
             WalletError::BadCoinToken(m) => write!(f, "bad coin token: {m}"),
             WalletError::BadMnemonic(m) => write!(f, "invalid mnemonic: {m}"),
+            WalletError::BadTariEntropy => f.write_str(
+                "a Tari secret is the seed entropy, 32 hex characters (16 bytes); restore the \
+                 24 words with --mnemonic",
+            ),
         }
     }
 }
@@ -232,6 +243,17 @@ pub fn address_from_secret_kind(
         let sk = families::xelis::parse_secret_key(secret_hex).ok_or(WalletError::BadPrivKeyHex)?;
         return xelis_wallet(&spec, &sk, net);
     }
+    // A Tari secret is the CipherSeed's 16 bytes of entropy, from which both keys are hashed.
+    if spec.family() == Family::Tari {
+        if net == Network::Testnet {
+            return Err(WalletError::UnsupportedTestnet);
+        }
+        let mut entropy =
+            families::tari::parse_entropy(secret_hex).ok_or(WalletError::BadTariEntropy)?;
+        let w = tari_wallet(&spec, &entropy, None);
+        zeroize::Zeroize::zeroize(&mut entropy);
+        return Ok(w);
+    }
     let priv32 = parse_secret(secret_hex)?;
     let d = curves::secp256k1::scalar_in_range(&priv32)?;
     build_wallet(&spec, &d, &priv32, net, legacy)
@@ -280,6 +302,22 @@ pub fn generate(coin: &str, net: Network) -> Result<Wallet, WalletError> {
             return w;
         }
     }
+    if spec.family() == Family::Tari {
+        if net == Network::Testnet {
+            return Err(WalletError::UnsupportedTestnet);
+        }
+        // `CipherSeed::random`: 16 bytes of entropy, a 5-byte salt, and today as the birthday. The
+        // words are enciphered once (Argon2, 46 MiB) and the wallet is built from the entropy.
+        let mut seed = families::tari::CipherSeed {
+            birthday: families::tari::birthday_today(),
+            entropy: [0u8; families::tari::ENTROPY_LEN],
+            salt: [0u8; families::tari::SALT_LEN],
+        };
+        getrandom::fill(&mut seed.entropy).map_err(|_| WalletError::Entropy)?;
+        getrandom::fill(&mut seed.salt).map_err(|_| WalletError::Entropy)?;
+        let phrase = seed.to_phrase();
+        return Ok(tari_wallet(&spec, &seed.entropy, Some(phrase.to_string())));
+    }
     loop {
         let mut buf = [0u8; 32];
         getrandom::fill(&mut buf).map_err(|_| WalletError::Entropy)?;
@@ -327,13 +365,28 @@ fn noid_wallet(spec: &coins::CoinSpec, master: &[u8; 32]) -> Wallet {
     }
 }
 
-/// Derive the payout [`Wallet`] of a Nockchain wallet from its BIP39 phrase (12 to 24 words,
-/// empty passphrase, the official wallet's import). The address is the master key's v1 pkh.
+/// Derive the payout [`Wallet`] of a wallet restored from a bare phrase.
 ///
-/// Only coins of the Nockchain family take a bare phrase. Every other coin derives from a BIP44
-/// path instead (see [`hd::derive`]), so it reports [`WalletError::BadMnemonic`] here.
+/// For Nockchain the phrase is BIP39 (12 to 24 words, empty passphrase, the official wallet's
+/// import), and the address is the master key's v1 pkh. For Tari it is the 24-word CipherSeed
+/// (no passphrase), and the address is the one-sided mainnet dual address; deciphering runs
+/// Argon2 over 46 MiB once.
+///
+/// Only those two families take a bare phrase. Every other coin derives from a BIP44 path instead
+/// (see [`hd::derive`]), so it reports [`WalletError::BadMnemonic`] here.
 pub fn address_from_mnemonic(coin: &str, phrase: &str) -> Result<Wallet, WalletError> {
     let spec = resolve_spec(coin)?;
+    // A Tari phrase is a CipherSeed, not BIP39: it is deciphered (CRC, Argon2, MAC) to its entropy.
+    if spec.family() == Family::Tari {
+        let seed = families::tari::CipherSeed::from_phrase(phrase)
+            .map_err(|e| WalletError::BadMnemonic(e.to_string()))?;
+        let canonical = phrase
+            .split_whitespace()
+            .map(str::to_ascii_lowercase)
+            .collect::<Vec<_>>()
+            .join(" ");
+        return Ok(tari_wallet(&spec, &seed.entropy, Some(canonical)));
+    }
     if spec.family() != Family::Nock {
         return Err(WalletError::BadMnemonic(format!(
             "{coin} does not derive from a bare BIP39 phrase (see `new --hd`)"
@@ -394,6 +447,29 @@ fn xelis_wallet(
         secret_hex: hexbytes::encode(sk),
         secret_std: SecretStd::RawHex(hexbytes::encode(sk)),
     })
+}
+
+/// Assemble the [`Wallet`] for a Tari seed's entropy. `phrase` is the 24-word CipherSeed it came
+/// from, when there is one; a wallet built from the bare entropy prints the entropy. `privkey` holds
+/// the spend private key (32 little-endian bytes), and `secret_hex` the 32-char hex entropy.
+fn tari_wallet(
+    spec: &coins::CoinSpec,
+    entropy: &[u8; families::tari::ENTROPY_LEN],
+    phrase: Option<String>,
+) -> Wallet {
+    let (mut view, spend) = families::tari::private_keys(entropy);
+    zeroize::Zeroize::zeroize(&mut view);
+    let secret_hex = hexbytes::encode(entropy);
+    Wallet {
+        coin: spec.ticker,
+        address: families::tari::address(entropy),
+        privkey: spend,
+        secret_std: match phrase {
+            Some(p) => SecretStd::TariSeed(p),
+            None => SecretStd::RawHex(secret_hex.clone()),
+        },
+        secret_hex,
+    }
 }
 
 /// Select the mainnet or testnet form of a per-network parameter.
@@ -469,6 +545,9 @@ pub(crate) fn dispatch(
         // that group's order here; `d` is unused.
         coins::FamilyParams::Xelis => families::xelis::address(priv32, net == Network::Testnet)
             .ok_or(WalletError::PrivKeyOutOfRange)?,
+        // Tari: the secret is 16 bytes of seed entropy, not a 32-byte key, so no 32-byte input
+        // has a Tari address. `address_from_secret_kind` and `generate` route Tari before here.
+        coins::FamilyParams::Tari => return Err(WalletError::BadTariEntropy),
 
         coins::FamilyParams::SegwitV0 {
             hrp,
@@ -1649,6 +1728,73 @@ mod tests {
             g.address
         );
         assert_eq!(detect_family(&g.address), Some(Family::Quantus));
+    }
+
+    /// Tari through the public seam: the two official vectors of `families::tari`, from their 24
+    /// words and from their entropy, the `tari:` token, a generated seed's round trip, and the
+    /// refusals (testnet, a 64-hex key, a corrupted phrase).
+    #[test]
+    fn tari_seed_through_the_public_seam() {
+        use families::tari::tests::{FIXED_ADDRESS, VECTORS};
+        for v in &VECTORS {
+            let w = address_from_mnemonic("xtm", v.words).unwrap();
+            assert_eq!(w.coin, "xtm");
+            assert_eq!(w.address, v.one_sided);
+            assert_eq!(w.secret_hex, v.entropy);
+            let canonical = v.words.split_whitespace().collect::<Vec<_>>().join(" ");
+            assert_eq!(w.secret_std, SecretStd::TariSeed(canonical));
+            assert_eq!(detect_family(&w.address), Some(Family::Tari));
+            assert_eq!(detect_family(v.default), Some(Family::Tari));
+
+            let e = address_from_secret("xtm", v.entropy, Network::Mainnet).unwrap();
+            assert_eq!(e.address, v.one_sided);
+            assert_eq!(e.secret_std, SecretStd::RawHex(v.entropy.to_string()));
+            let t = address_from_secret("tari:", v.entropy, Network::Mainnet).unwrap();
+            assert_eq!(t.address, v.one_sided);
+            assert!(is_custom_token("tari:"));
+        }
+        assert_eq!(
+            address_from_secret("xtm", "000102030405060708090a0b0c0d0e0f", Network::Mainnet)
+                .unwrap()
+                .address,
+            FIXED_ADDRESS
+        );
+        assert_eq!(
+            address_from_secret("xtm", VECTORS[0].entropy, Network::Testnet).err(),
+            Some(WalletError::UnsupportedTestnet)
+        );
+        assert_eq!(
+            generate("xtm", Network::Testnet).err(),
+            Some(WalletError::UnsupportedTestnet)
+        );
+        assert_eq!(
+            address_from_secret("xtm", PRIV1, Network::Mainnet).err(),
+            Some(WalletError::BadTariEntropy)
+        );
+        let mut words: Vec<&str> = VECTORS[0].words.split_whitespace().collect();
+        words.swap(2, 3);
+        assert!(matches!(
+            address_from_mnemonic("xtm", &words.join(" ")),
+            Err(WalletError::BadMnemonic(_))
+        ));
+
+        let g = generate("xtm", Network::Mainnet).unwrap();
+        let SecretStd::TariSeed(phrase) = &g.secret_std else {
+            panic!("a minted Tari wallet carries its seed words")
+        };
+        assert_eq!(phrase.split_whitespace().count(), 24);
+        assert!(g.address.starts_with("12"), "{}", g.address);
+        assert_eq!(
+            address_from_mnemonic("xtm", phrase).unwrap().address,
+            g.address
+        );
+        assert_eq!(
+            address_from_secret("xtm", &g.secret_hex, Network::Mainnet)
+                .unwrap()
+                .address,
+            g.address
+        );
+        assert_eq!(detect_family(&g.address), Some(Family::Tari));
     }
 
     /// Xelis through the public seam: vector 1 of `families::xelis` (private key 1, little-endian),

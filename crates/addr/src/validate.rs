@@ -24,10 +24,10 @@ use std::sync::OnceLock;
 
 use sha2::{Digest, Sha256};
 
-use crate::codec::{base58, bech32, cashaddr, conflux, cryptonote, nock};
+use crate::codec::{base58, bech32, cashaddr, conflux, cryptonote, nock, tari};
 use crate::coins::{
     Family, FamilyParams, COINS, EPICBOX_VERSION, NOID_ADDRESS_LEN, NOID_HRP, QUANTUS_SS58_PREFIX,
-    XELIS_HRP, XELIS_HRP_TESTNET, XELIS_SEPARATOR,
+    TARI_NETWORK_MAINNET, XELIS_HRP, XELIS_HRP_TESTNET, XELIS_SEPARATOR,
 };
 
 /// Characters in a Warthog address: 24 bytes (`hash160(20) ‖ checksum(4)`), two nibbles each.
@@ -239,6 +239,13 @@ pub fn detect_family(addr: &str) -> Option<Family> {
         }
     }
 
+    // 4d. Tari: a mainnet dual address, three separately base58-encoded parts with a DammSum.
+    //     See [`tari_family`]. Its own arm, because the split encoding does not decode as one
+    //     base58 number to the same bytes.
+    if let Some(family) = tari_family(a) {
+        return Some(family);
+    }
+
     // 5. CryptoNote / Monero: block-base58, `varint(prefix) ‖ spend(32) ‖ view(32) ‖ checksum(4)`,
     //    with the Keccak-256 checksum verified. Keyed on the coin table, so a fork with a
     //    multi-byte prefix (Zephyr `ZEPHYR…`, Salvium `SaLv…`) is recognised too — a
@@ -365,6 +372,7 @@ pub fn family_name(f: Family) -> &'static str {
         Family::Quantus => "Quantus (SS58 189, qz)",
         Family::Nock => "Nockchain (base58 payee hash, no checksum)",
         Family::Xelis => "Xelis (bech32 xel:)",
+        Family::Tari => "Tari (base58 dual address)",
     }
 }
 
@@ -683,6 +691,23 @@ fn xelis_family(a: &str) -> Option<Family> {
         XELIS_TYPE_DATA if !tail.is_empty() => Some(Family::Xelis),
         _ => None,
     }
+}
+
+/// Whether `a` is a mainnet Tari dual address: network byte [`TARI_NETWORK_MAINNET`], features
+/// that are only known flags, a payment id only when the features carry that flag, and a DammSum
+/// of zero over all of it. Any features combination is accepted, the one-sided `12…` and the default
+/// `14…` alike.
+///
+/// Source: `tari-project/tari@ae2296bc` `base_layer/common_types/src/tari_address/dual_address.rs`
+/// (`from_base58`, `from_bytes`). Two deliberate differences from that parser. Only mainnet is
+/// claimed, because only mainnet is modelled. The keys are not checked to be valid Ristretto255
+/// points, because that needs curve arithmetic and this crate links none, so a corruption that
+/// keeps the one-byte DammSum (about 1 in 256 of the multi-byte ones a base58 typo makes) is not
+/// caught here. The 35-byte single address is not claimed: it has no view key and cannot receive
+/// a coinbase.
+fn tari_family(a: &str) -> Option<Family> {
+    let bytes = tari::decode(a)?;
+    (bytes[0] == TARI_NETWORK_MAINNET).then_some(Family::Tari)
 }
 
 /// Whether a decoded base58check payload is `version ‖ hash160` for a version prefix the coin table
@@ -1983,6 +2008,125 @@ mod tests {
             Verdict::Mismatch {
                 detected: Family::Xelis,
                 expected: Family::KaspaAddr
+            }
+        ));
+    }
+
+    /// The two official vectors of `forager-wallet`'s `families/tari.rs`, each as
+    /// `(view key, spend key, one-sided address, default address)`. Produced by running
+    /// `tari-project/tari@ae2296bc`'s `TariAddress::new_dual_address(..).to_base58()`. The second
+    /// vector's keys are those of the fixed seed whose words that code also decoded.
+    const TARI_VECTORS: [(&str, &str, &str, &str); 2] = [
+        (
+            "5864bb035381e44bf84e2ca9b004bf13f31f847c09825af1328e56a95c9c142c",
+            "d441523e3d598f33a69ea0c5731de1b87f05736aa2787fa30e608a3019b6a246",
+            "128oRQaWVvBxWLKB7VvU9XzWwP7C5rMptNa3HxT2L8GMRgeKMnGJdt1w5geMC6oDqmL7JgJmTtTqz8hGoVSXpEsAzVp",
+            "148oRQaWVvBxWLKB7VvU9XzWwP7C5rMptNa3HxT2L8GMRgeKMnGJdt1w5geMC6oDqmL7JgJmTtTqz8hGoVSXpEsAzVR",
+        ),
+        (
+            "90f9e4b6396c6c3cda3e3e04c5ffea05d4ba8cdbdcfe374544320b1ee67b2720",
+            "f888220b123e51a7481db103380ee2c6e03d7c97598dd68c08df44075f6ce575",
+            "12Do2V8XgiphRqp4461rUuuEDLetmW6aYuRsofejJF3ynJW9oCngb6RPE6q6iKyCjittwtfEi8SRT9JvJCBrmTTUXmR",
+            "14Do2V8XgiphRqp4461rUuuEDLetmW6aYuRsofejJF3ynJW9oCngb6RPE6q6iKyCjittwtfEi8SRT9JvJCBrmTTUXm8",
+        ),
+    ];
+
+    fn key32(h: &str) -> [u8; 32] {
+        crate::hexbytes::decode_n::<32>(h).unwrap()
+    }
+
+    /// Both forms encode exactly as the reference does, decode back to the same bytes, and are
+    /// detected; the official hex of the fixed seed's one-sided address pins the byte layout.
+    #[test]
+    fn tari_official_addresses_encode_decode_and_detect() {
+        for (view, spend, one_sided, default) in TARI_VECTORS {
+            for (features, a) in [(1u8, one_sided), (3u8, default)] {
+                let bytes = tari::dual_bytes(0x00, features, &key32(view), &key32(spend));
+                assert_eq!(tari::encode(&bytes), a);
+                assert_eq!(tari::decode(a).unwrap(), bytes.to_vec());
+                assert_eq!(detect_family(a), Some(Family::Tari), "{a}");
+                assert_eq!(check(a, Family::Tari), Verdict::Ok);
+            }
+        }
+        let bytes = tari::decode(TARI_VECTORS[1].2).unwrap();
+        assert_eq!(
+            crate::hexbytes::encode(&bytes),
+            "000190f9e4b6396c6c3cda3e3e04c5ffea05d4ba8cdbdcfe374544320b1ee67b2720f888220b123e51a7\
+             481db103380ee2c6e03d7c97598dd68c08df44075f6ce575e0"
+        );
+    }
+
+    /// Network, features, payment-id and checksum rules. Every one of these strings carries a
+    /// valid DammSum, so only the rule under test can refuse it.
+    #[test]
+    fn tari_layout_rules() {
+        let (view, spend, _, _) = TARI_VECTORS[0];
+        let (view, spend) = (key32(view), key32(spend));
+        let enc = |network: u8, features: u8, payment_id: &[u8]| {
+            let mut b = tari::dual_bytes(network, features, &view, &spend)[..66].to_vec();
+            b.extend_from_slice(payment_id);
+            b.push(tari::dammsum(&b));
+            tari::encode(&b)
+        };
+        // Every combination of known flags is a Tari address; the empty set too, as the reference
+        // parser accepts it.
+        for features in 0..=7u8 {
+            let payment_id: &[u8] = if features & 4 != 0 { &[1, 2, 3] } else { &[] };
+            let a = enc(0x00, features, payment_id);
+            assert_eq!(detect_family(&a), Some(Family::Tari), "{features}: {a}");
+        }
+        // An unknown flag, a payment id without its flag, and a non-mainnet network are not.
+        assert_eq!(detect_family(&enc(0x00, 0x08 | 1, &[])), None);
+        assert_ne!(detect_family(&enc(0x00, 1, &[9])), Some(Family::Tari));
+        for network in [0x01, 0x02, 0x10, 0x24, 0x26] {
+            assert_ne!(detect_family(&enc(network, 1, &[])), Some(Family::Tari));
+        }
+        // Base58 of the whole byte string (no three-part split) is not a Tari address.
+        let whole = base58::encode(&tari::dual_bytes(0x00, 1, &view, &spend));
+        assert_ne!(detect_family(&whole), Some(Family::Tari));
+    }
+
+    /// Single-character corruptions of the official addresses. The network and features
+    /// characters, and the last character, are always caught; a substitution elsewhere changes
+    /// several bytes and slips past the one-byte DammSum about once in 256, so the sweep asserts
+    /// that no more than a handful of those survive.
+    #[test]
+    fn a_corrupted_tari_address_is_almost_always_refused() {
+        let mut survived = 0;
+        let mut tried = 0;
+        for (_, _, one_sided, default) in TARI_VECTORS {
+            for a in [one_sided, default] {
+                for pos in 0..a.len() {
+                    for c in *b"qpZ9" {
+                        let mut bad = a.as_bytes().to_vec();
+                        if bad[pos] == c {
+                            continue;
+                        }
+                        bad[pos] = c;
+                        let bad = String::from_utf8(bad).unwrap();
+                        tried += 1;
+                        if detect_family(&bad) == Some(Family::Tari) {
+                            assert!(pos >= 2, "{bad}");
+                            survived += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            survived * 64 < tried,
+            "{survived} of {tried} corruptions survived"
+        );
+        assert_ne!(detect_family(&TARI_VECTORS[0].2[..90]), Some(Family::Tari));
+    }
+
+    #[test]
+    fn tari_is_compatible_only_with_itself() {
+        assert!(matches!(
+            check(TARI_VECTORS[0].2, Family::CryptoNote),
+            Verdict::Mismatch {
+                detected: Family::Tari,
+                expected: Family::CryptoNote
             }
         ));
     }

@@ -9,29 +9,34 @@ Crates offered under `MIT OR Apache-2.0` are used here under **Apache-2.0**, who
 is in [`LICENSE`](LICENSE) at the repository root. Their MIT text is still reproduced where the
 crate ships one, so the notice is preserved either way.
 
-Generated from `cargo metadata`. 82 third-party packages.
+Generated from `cargo metadata`. 88 third-party packages.
 
 ## Summary
 
 | Crate | Version | License |
 |---|---|---|
+| `argon2` | 0.6.0 | MIT OR Apache-2.0 |
 | `arrayvec` | 0.7.8 | MIT OR Apache-2.0 |
 | `autocfg` | 1.5.1 | Apache-2.0 OR MIT |
 | `base16ct` | 1.0.0 | Apache-2.0 OR MIT |
 | `base64ct` | 1.8.3 | Apache-2.0 OR MIT |
 | `bip32` | 0.6.0 | Apache-2.0 OR MIT |
+| `blake2` | 0.11.0 | MIT OR Apache-2.0 |
 | `blake2b_simd` | 1.0.5 | MIT |
 | `block-buffer` | 0.10.4 | MIT OR Apache-2.0 |
 | `block-buffer` | 0.12.1 | MIT OR Apache-2.0 |
 | `bs58` | 0.5.1 | MIT/Apache-2.0 |
 | `cc` | 1.11.2 | MIT OR Apache-2.0 |
 | `cfg-if` | 1.0.5 | MIT OR Apache-2.0 |
+| `chacha20` | 0.10.2 | MIT OR Apache-2.0 |
+| `cipher` | 0.5.2 | MIT OR Apache-2.0 |
 | `cmov` | 0.5.4 | Apache-2.0 OR MIT |
 | `const-oid` | 0.10.3 | Apache-2.0 OR MIT |
 | `constant_time_eq` | 0.4.2 | CC0-1.0 OR MIT-0 OR Apache-2.0 |
 | `cpubits` | 0.1.1 | MIT OR Apache-2.0 |
 | `cpufeatures` | 0.2.17 | MIT OR Apache-2.0 |
 | `cpufeatures` | 0.3.1 | MIT OR Apache-2.0 |
+| `crc32fast` | 1.5.6 | MIT OR Apache-2.0 |
 | `crypto-bigint` | 0.7.11 | Apache-2.0 OR MIT |
 | `crypto-common` | 0.1.7 | MIT OR Apache-2.0 |
 | `crypto-common` | 0.2.2 | MIT OR Apache-2.0 |
@@ -51,6 +56,7 @@ Generated from `cargo metadata`. 82 third-party packages.
 | `group` | 0.14.0 | MIT/Apache-2.0 |
 | `hmac` | 0.13.0 | MIT OR Apache-2.0 |
 | `hybrid-array` | 0.4.15 | MIT OR Apache-2.0 |
+| `inout` | 0.2.6 | MIT OR Apache-2.0 |
 | `k256` | 0.14.0 | Apache-2.0 OR MIT |
 | `keccak` | 0.2.2 | Apache-2.0 OR MIT |
 | `libc` | 0.2.191 | MIT OR Apache-2.0 |
@@ -99,6 +105,40 @@ Generated from `cargo metadata`. 82 third-party packages.
 | `zeroize` | 1.9.1 | Apache-2.0 OR MIT |
 
 ## Notice texts
+
+### argon2 0.6.0 — MIT OR Apache-2.0
+
+<https://github.com/RustCrypto/password-hashes>
+
+`LICENSE-MIT`:
+
+```
+Copyright (c) 2021-2026 The RustCrypto Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
 
 ### arrayvec 0.7.8 — MIT OR Apache-2.0
 
@@ -267,6 +307,42 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+### blake2 0.11.0 — MIT OR Apache-2.0
+
+<https://github.com/RustCrypto/hashes>
+
+`LICENSE-MIT`:
+
+```
+Copyright (c) 2017-2026 The RustCrypto Project Developers
+Copyright (c) 2017 Artyom Pavlov
+Copyright (c) 2015-2016 The blake2-rfc Developers, Cesar Barros
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
 ### block-buffer 0.10.4 — MIT OR Apache-2.0
 
 <https://github.com/RustCrypto/utils>
@@ -406,6 +482,74 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 Copyright (c) 2014 Alex Crichton
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
+### chacha20 0.10.2 — MIT OR Apache-2.0
+
+<https://github.com/RustCrypto/stream-ciphers>
+
+`LICENSE-MIT`:
+
+```
+Copyright (c) 2019-2026 The RustCrypto Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
+### cipher 0.5.2 — MIT OR Apache-2.0
+
+<https://github.com/RustCrypto/traits>
+
+`LICENSE-MIT`:
+
+```
+Copyright (c) 2016-2025 RustCrypto Developers
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
@@ -749,6 +893,36 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
+```
+
+### crc32fast 1.5.6 — MIT OR Apache-2.0
+
+<https://github.com/srijs/rust-crc32fast>
+
+`LICENSE-MIT`:
+
+```
+MIT License
+
+Copyright (c) 2018 Sam Rijs, Alex Crichton and contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
 ### crypto-bigint 0.7.11 — Apache-2.0 OR MIT
@@ -1397,6 +1571,41 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 Copyright (c) 2022-2026 The RustCrypto Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
+### inout 0.2.6 — MIT OR Apache-2.0
+
+<https://github.com/RustCrypto/utils>
+
+`LICENSE-MIT`:
+
+```
+Copyright (c) 2022-2025 The RustCrypto Project Developers
+Copyright (c) 2022 Artyom Pavlov
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated

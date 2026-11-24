@@ -18,7 +18,8 @@ assert!(matches!(check("not-an-address", Family::P2pkh), Verdict::Unrecognized))
 Families: Taproot (bech32m), SegWit v0 (bech32), P2PKH (base58check), Ethereum (EIP-55),
 CryptoNote, Kaspa-family (CashAddr), Ergo, Alephium, XDAG, Warthog, Epic Cash epicbox, Conflux Core
 Space (CIP-37), Parano1d (bech32m `o1…`), Quantus (SS58 `qz…`), Nockchain (plain base58 of a
-Tip5 digest) and Xelis (bech32 with a `:` separator, `xel:…`), across 63 coins.
+Tip5 digest), Xelis (bech32 with a `:` separator, `xel:…`) and Tari (a base58 dual address,
+`12…`/`14…`), across 64 coins.
 
 Classification verifies a checksum wherever the scheme has one: base58check's double-SHA256,
 bech32/bech32m's polymod, CashAddr's polymod, Ergo's Blake2b-256, CryptoNote's Keccak-256, and
@@ -33,7 +34,10 @@ checked. Detection claims only the 54 and 55 character form, because every short
 with a corrupted address of some other family; `check` applies the pool's full 40 to 55 rule when
 a pool expects Nockchain. A Xelis address is checked for its HRP, its bech32 checksum and its type
 tag, but its public key is not checked to be a valid Ristretto255 point: that needs curve
-arithmetic, which this crate does not contain.
+arithmetic, which this crate does not contain. The same holds for the two keys of a Tari address,
+which is checked for its mainnet network byte, its features and its one-byte DammSum. A one-byte
+checksum catches every single-byte error, but a base58 typo changes several bytes, and about one
+such typo in 256 still checksums.
 
 ## What this crate deliberately does not contain
 
