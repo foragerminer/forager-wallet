@@ -27,6 +27,7 @@ use sha2::{Digest, Sha256};
 use crate::codec::{base58, bech32, cashaddr, conflux, cryptonote, nock};
 use crate::coins::{
     Family, FamilyParams, COINS, EPICBOX_VERSION, NOID_ADDRESS_LEN, NOID_HRP, QUANTUS_SS58_PREFIX,
+    XELIS_HRP, XELIS_HRP_TESTNET, XELIS_SEPARATOR,
 };
 
 /// Characters in a Warthog address: 24 bytes (`hash160(20) ‖ checksum(4)`), two nibbles each.
@@ -162,6 +163,13 @@ pub fn detect_family(addr: &str) -> Option<Family> {
         {
             return Some(Family::Noid);
         }
+    }
+
+    // 2d. Xelis: classic bech32 behind a `:` separator, HRP `xel` or `xet`, checksum verified.
+    //     See [`xelis_family`]. The Kaspa and Conflux arms above also split on `:`, but under a
+    //     40-bit CashAddr checksum and their own prefixes, so neither claims a Xelis string.
+    if let Some(family) = xelis_family(a) {
+        return Some(family);
     }
 
     // 3. bech32 (SegWit v0) / bech32m (Taproot), keyed on a modelled HRP + checksum variant.
@@ -356,6 +364,7 @@ pub fn family_name(f: Family) -> &'static str {
         Family::Noid => "Parano1d (bech32m o1)",
         Family::Quantus => "Quantus (SS58 189, qz)",
         Family::Nock => "Nockchain (base58 payee hash, no checksum)",
+        Family::Xelis => "Xelis (bech32 xel:)",
     }
 }
 
@@ -635,6 +644,45 @@ fn quantus_family(raw: &[u8]) -> Option<Family> {
     let mut pre = b"SS58PRE".to_vec();
     pre.extend_from_slice(body);
     (crate::hash::blake2b512(&pre)[..SS58_CHECKSUM_LEN] == *checksum).then_some(Family::Quantus)
+}
+
+/// Bytes in a compressed Ristretto255 point, the public key at the front of a Xelis address.
+const XELIS_KEY_LEN: usize = 32;
+
+/// Xelis `AddressType` tag for a normal address: the key and nothing after the tag.
+const XELIS_TYPE_NORMAL: u8 = 0x00;
+
+/// Xelis `AddressType` tag for an integrated address: the key, the tag, then serialized data.
+const XELIS_TYPE_DATA: u8 = 0x01;
+
+/// Whether `a` is a Xelis address: lowercase, classic bech32 (not bech32m) with
+/// [`XELIS_SEPARATOR`], HRP [`XELIS_HRP`] or [`XELIS_HRP_TESTNET`], and a payload of a 32-byte key
+/// followed by a known type tag. A normal address (tag `0x00`) is exactly 33 bytes; a data address
+/// (tag `0x01`) has at least one byte after the tag.
+///
+/// Source: `xelis-project/xelis-blockchain@db59b5c2` `xelis_common/src/crypto/bech32.rs` (`decode`,
+/// checksum constant 1) and `xelis_common/src/crypto/address.rs` (`Address::from_string`,
+/// `AddressType::read`). Two deliberate differences from that parser. A normal address with bytes
+/// after its tag is refused here: the reference ignores the tail, but no wallet emits one. The key
+/// is not checked to be a valid Ristretto encoding, because that needs curve arithmetic and this
+/// crate links none (see the repository README). The 90-character bech32 limit also applies here,
+/// so a data address longer than that comes back unrecognized rather than wrong.
+fn xelis_family(a: &str) -> Option<Family> {
+    // The reference rejects mixed case only, but an all-uppercase string carries the HRP `XEL`,
+    // which then fails its HRP check. So only lowercase is a Xelis address.
+    if a.bytes().any(|b| b.is_ascii_uppercase()) {
+        return None;
+    }
+    let (hrp, variant, payload) = bech32::decode_with_separator(a, XELIS_SEPARATOR)?;
+    if variant != bech32::Variant::Bech32 || (hrp != XELIS_HRP && hrp != XELIS_HRP_TESTNET) {
+        return None;
+    }
+    let tail = payload.get(XELIS_KEY_LEN + 1..)?;
+    match payload[XELIS_KEY_LEN] {
+        XELIS_TYPE_NORMAL if tail.is_empty() => Some(Family::Xelis),
+        XELIS_TYPE_DATA if !tail.is_empty() => Some(Family::Xelis),
+        _ => None,
+    }
 }
 
 /// Whether a decoded base58check payload is `version ‖ hash160` for a version prefix the coin table
@@ -1682,6 +1730,114 @@ mod tests {
             Verdict::Mismatch {
                 detected: Family::Ethereum,
                 ..
+            }
+        ));
+    }
+
+    /// The four known-answer vectors of the generator (`forager-wallet` `families/xelis.rs`), each
+    /// as `(compressed public key, mainnet address, testnet address)`. They were produced by
+    /// running `xelis-project/xelis-blockchain@db59b5c2`'s own key and address code.
+    const XELIS_VECTORS: [(&str, &str, &str); 4] = [
+        (
+            "8c9240b456a9e6dc65c377a1048d745f94a08cdb7f44cbcd7b46f34048871134",
+            "xel:3jfypdzk48ndcewrw7ssfrt5t722prxm0azvhntmgme5qjy8zy6qqckgjqg",
+            "xet:3jfypdzk48ndcewrw7ssfrt5t722prxm0azvhntmgme5qjy8zy6qqq9zzvk",
+        ),
+        (
+            "f05bc1df2831717c2992d85b57e0cf3d123fd6c254257de5f784be369747b249",
+            "xel:7pdurhegx9chc2vjmpd40cx085frl4kz2sjhme0hsjlrd968kfysq434xga",
+            "xet:7pdurhegx9chc2vjmpd40cx085frl4kz2sjhme0hsjlrd968kfysqdzlkyr",
+        ),
+        (
+            "1685f8ba5b0c7265ef6f4d75f6a95429b3672383fa4fee7b0878b0b182243249",
+            "xel:z6zl3wjmp3extmm0f46ld2259xekwgurlf87u7cg0zctrq3yxfysq4mrs2l",
+            "xet:z6zl3wjmp3extmm0f46ld2259xekwgurlf87u7cg0zctrq3yxfysqdgfqxp",
+        ),
+        (
+            "d09cf6c9043985e91e7616759aa8f5401cab18f0ee03f54457b5a8277e8b5b31",
+            "xel:6zw0djgy8xz7j8nkze6e4284gqw2kx8sacpl23zhkk5zwl5ttvcsq4kpcqz",
+            "xet:6zw0djgy8xz7j8nkze6e4284gqw2kx8sacpl23zhkk5zwl5ttvcsqd9tgvu",
+        ),
+    ];
+
+    /// The `key ‖ type` payload of a Xelis address for a hex key.
+    fn xelis_payload(key_hex: &str, tag: u8, data: &[u8]) -> Vec<u8> {
+        let mut p = crate::hexbytes::decode(key_hex).unwrap();
+        p.push(tag);
+        p.extend_from_slice(data);
+        p
+    }
+
+    #[test]
+    fn detects_xelis_and_decodes_the_published_payload() {
+        for (key, main, test) in XELIS_VECTORS {
+            for (a, hrp) in [(main, XELIS_HRP), (test, XELIS_HRP_TESTNET)] {
+                assert_eq!(a.len(), 63, "{a}");
+                assert_eq!(detect_family(a), Some(Family::Xelis), "{a}");
+                assert_eq!(check(a, Family::Xelis), Verdict::Ok, "{a}");
+                let (h, variant, payload) = bech32::decode_with_separator(a, ':').unwrap();
+                assert_eq!(h, hrp);
+                assert_eq!(variant, bech32::Variant::Bech32);
+                assert_eq!(payload, xelis_payload(key, 0, &[]));
+                // The encoder is the exact inverse.
+                assert_eq!(
+                    bech32::encode_bech32_bytes_with_separator(hrp, ':', &payload),
+                    a
+                );
+            }
+        }
+    }
+
+    /// No single-character substitution of a Xelis address is answered as Xelis, and neither is a
+    /// truncated one, an uppercase one, or one under a foreign HRP, separator or checksum constant.
+    #[test]
+    fn a_malformed_xelis_address_is_not_confidently_classified() {
+        let (key, a, _) = XELIS_VECTORS[0];
+        for pos in 0..a.len() {
+            let mut bad = a.as_bytes().to_vec();
+            bad[pos] = if bad[pos] == b'q' { b'p' } else { b'q' };
+            let bad = String::from_utf8(bad).unwrap();
+            assert_ne!(detect_family(&bad), Some(Family::Xelis), "{bad}");
+        }
+        assert_ne!(detect_family(&a[..a.len() - 1]), Some(Family::Xelis));
+        assert_ne!(detect_family(&a.to_ascii_uppercase()), Some(Family::Xelis));
+        let payload = xelis_payload(key, 0, &[]);
+        for foreign in [
+            bech32::encode_bech32_bytes_with_separator("xelis", ':', &payload),
+            bech32::encode_bech32_bytes_with_separator("xel", '1', &payload),
+            bech32::encode_bech32m_bytes("xel", &payload).replacen('1', ":", 1),
+        ] {
+            assert_eq!(detect_family(&foreign), None, "{foreign}");
+        }
+    }
+
+    /// The type tag after the key: `0x00` must end the payload, `0x01` must be followed by data,
+    /// and any other tag, or a payload too short to carry one, is not a Xelis address.
+    #[test]
+    fn xelis_type_tag_rules() {
+        let (key, _, _) = XELIS_VECTORS[1];
+        let enc = |p: &[u8]| bech32::encode_bech32_bytes_with_separator("xel", ':', p);
+        assert_eq!(
+            detect_family(&enc(&xelis_payload(key, 1, &[0x00, 0x05]))),
+            Some(Family::Xelis)
+        );
+        for p in [
+            xelis_payload(key, 1, &[]),
+            xelis_payload(key, 0, &[0x00]),
+            xelis_payload(key, 2, &[]),
+            crate::hexbytes::decode(key).unwrap(),
+        ] {
+            assert_eq!(detect_family(&enc(&p)), None, "{}", enc(&p));
+        }
+    }
+
+    #[test]
+    fn xelis_is_compatible_only_with_itself() {
+        assert!(matches!(
+            check(XELIS_VECTORS[0].1, Family::KaspaAddr),
+            Verdict::Mismatch {
+                detected: Family::Xelis,
+                expected: Family::KaspaAddr
             }
         ));
     }

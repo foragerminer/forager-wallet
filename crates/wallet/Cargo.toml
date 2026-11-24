@@ -54,6 +54,10 @@ ml-dsa = { version = "=0.1.2", default-features = false }
 # Poseidon2 over Goldilocks: Quantus's account-id hash (`hash_bytes(public_key)`). MIT-0, and it
 # has no dependencies of its own.
 qp-poseidon-core = { version = "=3.1.0", default-features = false }
+# Ristretto255 group arithmetic and curve25519 scalars, for Xelis addresses (`s^-1 * H`). The
+# dalek-cryptography crate Xelis itself uses, pure Rust, BSD-3-Clause. No default features: the
+# basepoint tables, `alloc` and the hashing helpers are unused; `zeroize` wipes the scalar.
+curve25519-dalek = { version = "4.1.3", default-features = false, features = ["zeroize"] }
 
 # `bip32` is also a dev-dependency so the HD KATs can drive BIP32 CKDpriv directly against the
 # published BIP32 test vectors (an official-vector anchor for the non-circular per-coin address KATs).

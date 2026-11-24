@@ -27,6 +27,7 @@ Run `forager-wallet list` for the live table — this file documents it, and a t
 | Parano1d | bech32m("o", Poseidon2b(spend secret)), no witness version; spend secret 0 derived from a master secret | none |
 | Quantus | SS58 (prefix 189) of Poseidon2(ML-DSA-87 public key) | ML-DSA-87 (FIPS 204) |
 | Nockchain | base58 of the Tip5 digest of the master public key (v1 payee hash), no version byte, **no checksum** | Cheetah over Fp^6 (Goldilocks) |
+| Xelis | bech32 (classic checksum, not bech32m) with a `:` separator: `xel:` + (compressed `s^-1 * H` ‖ type `0x00`) | Ristretto255 |
 
 ## The coin table
 
@@ -88,8 +89,9 @@ may carry exactly one of two markers, and a marker is the only way a row can cla
 | `noid` | Parano1d | Parano1d | `o1…` | — |
 | `quan` | Quantus | Quantus | `qz…` | — |
 | `nock` | Nockchain | Nockchain | no fixed prefix | — |
+| `xel` | Xelis | Xelis | `xel:…` | — |
 
-Six rows need a word of explanation:
+Seven rows need a word of explanation:
 
 - **`scash`** — `bc1q…` is not a typo. Scash left Bitcoin's base58 and bech32 parameters unchanged,
   so a Scash address is byte-identical to the Bitcoin address for the same key, and no encoding can
@@ -154,6 +156,20 @@ Six rows need a word of explanation:
   mnemonic-to-address vectors captured from `nockchain-wallet` built from that commit. **Not
   checked:** pool payout (no live payout was made), and re-verification after a Nockchain protocol
   fork: re-run the vectors against the then-current wallet before a release.
+- **`xel`** — Xelis. The private key is a curve25519 scalar, and its 64 hex characters are the
+  scalar's **little-endian** bytes, which is how Xelis writes it. So `0000…0001`, the key the table
+  is tested with, is the scalar `2^248` here, and the scalar 1 is `0100…0000`. A key must be below
+  the group order and not zero; `restore` refuses any other key rather than reducing it. The public
+  key is `s^-1 * H`, where `H` is the Pedersen blinding generator, as a compressed Ristretto255
+  point. The address is that key and a type byte `0x00`, encoded as classic bech32 (checksum
+  constant 1, not bech32m) under the HRP `xel`, with `:` where BIP173 puts `1`. It is always 63
+  characters. `--testnet` gives the `xet:` form of the same key. The official Xelis wallet restores
+  the printed key with `recover_private_key`, which asks for exactly these 64 hex characters; the
+  25-word Xelis seed is not produced. `new --hd` does not apply. Source:
+  `xelis-project/xelis-blockchain@db59b5c2` (BSD-3-Clause), `xelis_common/src/crypto/address.rs`,
+  `bech32.rs`, `elgamal/key.rs`, `proofs/mod.rs` and `xelis_common/src/config.rs`. The known-answer
+  vectors (four keys, both networks) were produced by running that code. **Not checked:** a restore
+  in the official wallet and a pool payout.
 - **`firo`** — the table's only `(most keys)` row. Version byte `0x52` puts the 25-byte payload
   astride the base58 boundary between digit 32 (`Z`) and digit 33 (`a`): the interval the payload
   can occupy lies 1.222% below that boundary and 98.778% above it, so 98.8% of keys render `a…` and
@@ -287,6 +303,7 @@ token's `--legacy` form and its WIF inherit the same assumption.
 --coin noid:
 --coin quantus:
 --coin nock:
+--coin xelis:
 ```
 
 Integers are decimal or `0x`-prefixed hex. An unrecognised parameter is rejected rather than

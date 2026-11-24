@@ -73,6 +73,12 @@ const WORDLIST_FILES: &[&str] = &["wordlist_en.rs", "wordlist_bip39_en.rs"];
 /// clean-room implementations use generic names (e.g. `compress`, `scalarmult_base`).
 const TAINTED: &[(&str, &str)] = &[
     // --- ed25519-dalek — `src/curves/ed25519.rs` ---
+    //
+    // `curve25519-dalek` is a declared dependency since Xelis (`src/families/xelis.rs`), which
+    // calls it through `CompressedRistretto` and `Scalar` and never names its point types. These
+    // entries still guard the clean-room Ed25519 code, which must not borrow from it. If a future
+    // caller of the dependency needs one of these names, narrow the scan for that file rather
+    // than deleting the entry.
     ("ExpandedSecretKey", "ed25519-dalek struct"),
     ("CompressedEdwardsY", "ed25519-dalek struct"),
     ("RistrettoPoint", "ed25519-dalek struct"),

@@ -151,6 +151,28 @@ fn kad_testnet_p2pkh_uses_version_0x2e_and_looks_like_mainnet() {
     assert_eq!(testnet.address.len(), mainnet.address.len());
 }
 
+/// Xelis testnet swaps the HRP `xel` for `xet` and changes nothing else, so the key part of the
+/// address is identical and only the HRP and the six checksum characters differ. The private key
+/// is a little-endian scalar, so the vector is `01 00 … 00`, the scalar 1, whose public key is the
+/// Pedersen generator `H`. Both strings were produced by running
+/// `xelis-project/xelis-blockchain@db59b5c2`'s `Address::as_string`.
+#[test]
+fn xel_testnet_differs_from_mainnet_only_in_hrp_and_checksum() {
+    let one = "0100000000000000000000000000000000000000000000000000000000000000";
+    let main = address_from_secret("xel", one, Network::Mainnet).unwrap();
+    let test = address_from_secret("xel", one, Network::Testnet).unwrap();
+    assert_eq!(
+        main.address,
+        "xel:3jfypdzk48ndcewrw7ssfrt5t722prxm0azvhntmgme5qjy8zy6qqckgjqg"
+    );
+    assert_eq!(
+        test.address,
+        "xet:3jfypdzk48ndcewrw7ssfrt5t722prxm0azvhntmgme5qjy8zy6qqq9zzvk"
+    );
+    let body = |a: &str| a[4..a.len() - 6].to_string();
+    assert_eq!(body(&main.address), body(&test.address));
+}
+
 /// Whether a row declares any testnet-specific parameter at all.
 ///
 /// Ergo, Alephium and XDAG are excluded by construction: their families take no `Option` testnet
@@ -169,8 +191,9 @@ fn declares_testnet(params: &coins::FamilyParams) -> bool {
             version_testnet, ..
         } => version_testnet.is_some(),
         // Conflux's testnet prefix is not an `Option`: CIP-37 gives every network a prefix, and a
-        // row has to name both, so there is always a testnet value to check.
-        coins::FamilyParams::Conflux { .. } => true,
+        // row has to name both, so there is always a testnet value to check. Xelis's testnet HRP
+        // is a protocol constant (`XELIS_HRP_TESTNET`), so the same holds for it.
+        coins::FamilyParams::Conflux { .. } | coins::FamilyParams::Xelis => true,
         coins::FamilyParams::CryptoNote {
             network_byte_testnet,
             ..
@@ -192,7 +215,7 @@ fn declares_testnet(params: &coins::FamilyParams) -> bool {
 /// a testnet KAT for the new row — not something to update reflexively.
 ///
 /// Where each row's testnet output is pinned today:
-/// * `btc`, `ltc`, `scash`, `alpha`, `rvn`, `doge`, `kad` — this file.
+/// * `btc`, `ltc`, `scash`, `alpha`, `rvn`, `doge`, `kad`, `xel` — this file.
 /// * `xmr` — `families::cryptonote::tests::monero_testnet_address_uses_network_byte_53`.
 /// * `pearl`, `vtc`, `firo`, `mewc`, `evr`, `cfx`, `kas`, `kls`, `spr` — their per-coin tests in
 ///   `lib.rs`.
@@ -207,7 +230,7 @@ fn every_row_declaring_a_testnet_variant_has_a_testnet_kat() {
         declared,
         [
             "pearl", "btc", "ltc", "vtc", "doge", "rvn", "firo", "mewc", "evr", "kad", "cfx",
-            "xmr", "kas", "kls", "spr", "scash", "alpha"
+            "xmr", "kas", "kls", "spr", "xel", "scash", "alpha"
         ]
     );
     // Every one of them must actually mint on testnet rather than error — the cheap half of the

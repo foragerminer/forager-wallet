@@ -265,6 +265,13 @@ fn cmd_new(coin: &str, net: Network, legacy: bool, testnet: bool) -> Result<(), 
         println!("a raw seed into Quantus's own wallet is UNVERIFIED (its mnemonic import");
         println!("cannot produce this seed). Keep the seed and pass only the address to --wallet.");
     }
+    if crate::resolve_spec(coin).map(|s| s.family()) == Ok(Family::Xelis) {
+        println!();
+        println!("The raw key is the Xelis private key (a little-endian curve25519 scalar), not");
+        println!("a 25-word seed. The official wallet restores it with `recover_private_key`,");
+        println!("which asks for exactly these 64 hex characters. Before mining to the address,");
+        println!("restore the key there and confirm that the wallet shows the same address.");
+    }
 
     Ok(())
 }
@@ -482,6 +489,7 @@ fn family_label(family: Family) -> &'static str {
         Family::Noid => "Parano1d (bech32m, Poseidon2b)",
         Family::Quantus => "Quantus (SS58 189, Poseidon2 of ML-DSA-87 key)",
         Family::Nock => "Nockchain (base58 v1 payee hash, Tip5; no checksum)",
+        Family::Xelis => "Xelis (bech32 xel:, Ristretto255)",
     }
 }
 
@@ -576,6 +584,18 @@ mod tests {
         let seed = "d008285e7bbc3fc1374e12978cbb5a434a5e9e8129e26b883761f6ec6f2b385a";
         assert!(run(&argv(&["restore", seed, "--coin", "quan"])).is_ok());
         assert!(run(&argv(&["restore", "not-hex", "--coin", "quan"])).is_err());
+    }
+
+    #[test]
+    fn new_and_restore_xelis() {
+        assert!(run(&argv(&["new", "--coin", "xel"])).is_ok());
+        assert!(run(&argv(&["new", "--coin", "xel", "--testnet"])).is_ok());
+        let one = "0100000000000000000000000000000000000000000000000000000000000000";
+        assert!(run(&argv(&["restore", one, "--coin", "xel"])).is_ok());
+        assert!(run(&argv(&["restore", "not-hex", "--coin", "xel"])).is_err());
+        // Zero, and a key above the group order, are refused rather than reduced.
+        assert!(run(&argv(&["restore", &"00".repeat(32), "--coin", "xel"])).is_err());
+        assert!(run(&argv(&["restore", &"11".repeat(32), "--coin", "xel"])).is_err());
     }
 
     #[test]

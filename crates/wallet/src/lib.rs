@@ -226,6 +226,12 @@ pub fn address_from_secret_kind(
         let seed = families::quantus::parse_seed(secret_hex).ok_or(WalletError::BadPrivKeyHex)?;
         return Ok(quantus_wallet(&spec, &seed));
     }
+    // A Xelis private key is a curve25519 scalar, little-endian, range-checked against that group's
+    // order and not secp256k1's.
+    if spec.family() == Family::Xelis {
+        let sk = families::xelis::parse_secret_key(secret_hex).ok_or(WalletError::BadPrivKeyHex)?;
+        return xelis_wallet(&spec, &sk, net);
+    }
     let priv32 = parse_secret(secret_hex)?;
     let d = curves::secp256k1::scalar_in_range(&priv32)?;
     build_wallet(&spec, &d, &priv32, net, legacy)
@@ -258,6 +264,21 @@ pub fn generate(coin: &str, net: Network) -> Result<Wallet, WalletError> {
         let w = quantus_wallet(&spec, &seed);
         zeroize::Zeroize::zeroize(&mut seed);
         return Ok(w);
+    }
+    if spec.family() == Family::Xelis {
+        // 64 uniform bytes reduced modulo the group order, as Xelis's own `Scalar::random` draws a
+        // key; the zero scalar is redrawn.
+        let mut wide = [0u8; 64];
+        loop {
+            getrandom::fill(&mut wide).map_err(|_| WalletError::Entropy)?;
+            let Some(mut sk) = families::xelis::secret_from_wide(&wide) else {
+                continue;
+            };
+            zeroize::Zeroize::zeroize(&mut wide);
+            let w = xelis_wallet(&spec, &sk, net);
+            zeroize::Zeroize::zeroize(&mut sk);
+            return w;
+        }
     }
     loop {
         let mut buf = [0u8; 32];
@@ -357,6 +378,24 @@ fn quantus_wallet(spec: &coins::CoinSpec, seed: &[u8; 32]) -> Wallet {
     }
 }
 
+/// Assemble the [`Wallet`] for a Xelis private key: the 32-byte little-endian scalar as 64 lowercase
+/// hex characters, the form the official wallet's `recover_private_key` reads.
+fn xelis_wallet(
+    spec: &coins::CoinSpec,
+    sk: &[u8; 32],
+    net: Network,
+) -> Result<Wallet, WalletError> {
+    let address = families::xelis::address(sk, net == Network::Testnet)
+        .ok_or(WalletError::PrivKeyOutOfRange)?;
+    Ok(Wallet {
+        coin: spec.ticker,
+        address,
+        privkey: *sk,
+        secret_hex: hexbytes::encode(sk),
+        secret_std: SecretStd::RawHex(hexbytes::encode(sk)),
+    })
+}
+
 /// Select the mainnet or testnet form of a per-network parameter.
 ///
 /// Every family whose address encoding differs per network threads its parameter through here, so
@@ -426,6 +465,10 @@ pub(crate) fn dispatch(
         coins::FamilyParams::Nock => {
             families::nock::address(priv32).ok_or(WalletError::PrivKeyOutOfRange)?
         }
+        // Xelis: the input bytes are the little-endian curve25519 scalar, range-checked against
+        // that group's order here; `d` is unused.
+        coins::FamilyParams::Xelis => families::xelis::address(priv32, net == Network::Testnet)
+            .ok_or(WalletError::PrivKeyOutOfRange)?,
 
         coins::FamilyParams::SegwitV0 {
             hrp,
@@ -798,6 +841,7 @@ mod tests {
             ("xdag:", "xdag"),
             ("noid:", "noid"),
             ("quantus:", "quan"),
+            ("xelis:", "xel"),
         ] {
             let t = address_from_secret(token, PRIV1, Network::Mainnet).unwrap();
             let r = address_from_secret(ticker, PRIV1, Network::Mainnet).unwrap();
@@ -1407,6 +1451,48 @@ mod tests {
             g.address
         );
         assert_eq!(detect_family(&g.address), Some(Family::Quantus));
+    }
+
+    /// Xelis through the public seam: vector 1 of `families::xelis` (private key 1, little-endian),
+    /// whose public key is the generator `H` itself, on both networks.
+    #[test]
+    fn xelis_key_through_the_public_seam() {
+        let one = "0100000000000000000000000000000000000000000000000000000000000000";
+        let w = address_from_secret("xel", one, Network::Mainnet).unwrap();
+        assert_eq!(
+            w.address,
+            "xel:3jfypdzk48ndcewrw7ssfrt5t722prxm0azvhntmgme5qjy8zy6qqckgjqg"
+        );
+        assert_eq!(w.coin, "xel");
+        assert_eq!(w.secret_hex, one);
+        assert_eq!(w.secret_std, SecretStd::RawHex(one.to_string()));
+        let t = address_from_secret("xel", one, Network::Testnet).unwrap();
+        assert_eq!(
+            t.address,
+            "xet:3jfypdzk48ndcewrw7ssfrt5t722prxm0azvhntmgme5qjy8zy6qqq9zzvk"
+        );
+        // Zero and a non-canonical scalar are out of range; a malformed string is bad hex.
+        for bad in ["00".repeat(32), "11".repeat(32)] {
+            assert_eq!(
+                address_from_secret("xel", &bad, Network::Mainnet).err(),
+                Some(WalletError::PrivKeyOutOfRange)
+            );
+        }
+        assert_eq!(
+            address_from_secret("xel", &"0".repeat(63), Network::Mainnet).err(),
+            Some(WalletError::BadPrivKeyHex)
+        );
+        for net in [Network::Mainnet, Network::Testnet] {
+            let g = generate("xel", net).unwrap();
+            assert_eq!(g.address.len(), 63, "{}", g.address);
+            assert_eq!(
+                address_from_secret("xel", &g.secret_hex, net)
+                    .unwrap()
+                    .address,
+                g.address
+            );
+            assert_eq!(detect_family(&g.address), Some(Family::Xelis));
+        }
     }
 
     // ---- Zcash-family transparent P2PKH rows (single-key path) ----

@@ -64,7 +64,24 @@ pub enum Family {
     /// network-agnostic, and **no checksum**: see [`crate::codec::nock`]. The legacy v0 form, the
     /// base58 of the 97-byte public key, is not modelled.
     Nock,
+    /// Xelis (XEL): classic bech32 (not bech32m) with `:` in place of the `1` separator, over
+    /// `compressed_ristretto(s^-1 * H) ‖ type`, where `s` is the curve25519 private scalar and `H`
+    /// the Pedersen blinding generator. Type `0x00` is a normal address (63 characters, `xel:` on
+    /// mainnet, `xet:` on testnet); type `0x01` carries extra data after it.
+    Xelis,
 }
+
+/// Human-readable part of a mainnet Xelis address. Source: `xelis-project/xelis-blockchain@db59b5c2`
+/// `xelis_common/src/config.rs` (`PREFIX_ADDRESS`).
+pub const XELIS_HRP: &str = "xel";
+
+/// Human-readable part of every non-mainnet Xelis address: `TESTNET_PREFIX_ADDRESS` in the same
+/// file. `Address::from_string` accepts exactly these two HRPs.
+pub const XELIS_HRP_TESTNET: &str = "xet";
+
+/// The character between a Xelis address's HRP and its data: `SEPARATOR` in
+/// `xelis_common/src/crypto/bech32.rs`. BIP173 uses `1`.
+pub const XELIS_SEPARATOR: char = ':';
 
 /// SS58 network prefix of a Quantus address: `Ss58AddressFormat::custom(189)` in quantus-cli
 /// `src/cli/address_format.rs`. 189 is above 63, so SS58 spells it as two prefix bytes.
@@ -200,6 +217,9 @@ pub enum FamilyParams {
     /// Nockchain has no per-coin parameters: the address is the Tip5 hash of a public key on every
     /// network (see [`crate::codec::nock`]).
     Nock,
+    /// Xelis has no per-coin parameters: the HRPs are the protocol constants [`XELIS_HRP`] and
+    /// [`XELIS_HRP_TESTNET`].
+    Xelis,
 }
 
 impl FamilyParams {
@@ -222,6 +242,7 @@ impl FamilyParams {
             FamilyParams::Noid => Family::Noid,
             FamilyParams::Quantus => Family::Quantus,
             FamilyParams::Nock => Family::Nock,
+            FamilyParams::Xelis => Family::Xelis,
         }
     }
 
@@ -685,6 +706,18 @@ pub static COINS: &[CoinSpec] = &[
         hd_slip44: None,
         params: FamilyParams::Nock,
     },
+    // ---- Xelis family ----
+    // Xelis (XEL): address = bech32 (classic constant) with `:` as the separator, HRP "xel"
+    // (testnet "xet"), over `compressed_ristretto(s^-1 * H) ‖ 0x00`. The private key is a
+    // curve25519 scalar, 32 bytes little-endian. Source: xelis-project/xelis-blockchain@db59b5c2
+    // (BSD-3-Clause) xelis_common/src/crypto/{address.rs, bech32.rs, elgamal/key.rs} and
+    // xelis_common/src/config.rs.
+    CoinSpec {
+        ticker: "xel",
+        name: "Xelis",
+        hd_slip44: None,
+        params: FamilyParams::Xelis,
+    },
     // SCASH ("Satoshi Cash", RandomX): address bytes left BYTE-IDENTICAL to Bitcoin — P2PKH
     // 0x00, WIF 0x80, bech32 HRP "bc"; testnet 0x6f/"tb". So a SCASH address is indistinguishable
     // from a BTC one (same encoder, same bytes).  Source: scashnetwork/scash (MIT),
@@ -974,6 +1007,14 @@ pub static TOKEN_GRAMMAR: &[TokenSyntax] = &[
              checksum: a mistyped address is still valid and its funds are lost.",
         ),
     },
+    TokenSyntax {
+        family: "xelis",
+        keys: &[],
+        flags: &[],
+        syntax: "xelis:",
+        example: "xelis:",
+        caveat: None,
+    },
 ];
 
 /// The [`TokenSyntax::caveat`] for a runtime coin token's family, or `None` if it has none.
@@ -1102,6 +1143,7 @@ pub fn parse_token(token: &str) -> Result<CoinSpec, String> {
         "noid" => FamilyParams::Noid,
         "quantus" => FamilyParams::Quantus,
         "nock" => FamilyParams::Nock,
+        "xelis" => FamilyParams::Xelis,
         // Unreachable while `TOKEN_GRAMMAR` and this match list the same families — the lookup above
         // already rejected any name the grammar does not carry.  Report it instead of panicking, so a
         // grammar row added without an arm here degrades to a clear message; the
@@ -1495,6 +1537,7 @@ mod tests {
                 FamilyParams::Noid => Family::Noid,
                 FamilyParams::Quantus => Family::Quantus,
                 FamilyParams::Nock => Family::Nock,
+                FamilyParams::Xelis => Family::Xelis,
             };
             assert_eq!(spec.family(), expected, "{}", spec.ticker);
         }
