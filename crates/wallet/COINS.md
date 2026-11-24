@@ -14,9 +14,9 @@ Run `forager-wallet list` for the live table — this file documents it, and a t
 | Family | Encoding | Curve |
 |---|---|---|
 | Taproot | bech32m, witness v1, BIP340/341/350 key-path | secp256k1 |
-| SegWit v0 | bech32, witness v0 P2WPKH | secp256k1 |
+| SegWit v0 | bech32, witness v0 P2WPKH (Groestlcoin: legacy form and WIF under a double-Groestl-512 base58check) | secp256k1 |
 | P2PKH | base58check(version ‖ HASH160(pubkey)) | secp256k1 |
-| Ethereum | EIP-55 checksummed keccak160 of the uncompressed pubkey | secp256k1 |
+| Ethereum | EIP-55 checksummed keccak160 of the uncompressed pubkey (Quai: only Cyprus1, Quai-ledger addresses) | secp256k1 |
 | CryptoNote | dual spend/view keys, varint network prefix, 25-word seed | ed25519 |
 | Kaspa-family | CashAddr-style `<prefix>:<payload><8-char checksum>`, x-only pubkey, no tweak | secp256k1 |
 | Ergo P2PK | base58(prefix ‖ compressed pubkey ‖ Blake2b256[..4]) | secp256k1 |
@@ -29,6 +29,7 @@ Run `forager-wallet list` for the live table — this file documents it, and a t
 | Nockchain | base58 of the Tip5 digest of the master public key (v1 payee hash), no version byte, **no checksum** | Cheetah over Fp^6 (Goldilocks) |
 | Xelis | bech32 (classic checksum, not bech32m) with a `:` separator: `xel:` + (compressed `s^-1 * H` ‖ type `0x00`) | Ristretto255 |
 | Tari | base58(network) ‖ base58(features) ‖ base58(view key ‖ spend key ‖ DammSum), keys from a 24-word CipherSeed | Ristretto255 |
+| Zano | CryptoNote block-base58 of varint(0xc5) ‖ spend key ‖ view key ‖ Keccak-256[..4]; keys from a 32-byte seed and a 26-word phrase | ed25519 |
 
 ## The coin table
 
@@ -63,6 +64,7 @@ may carry exactly one of two markers, and a marker is the only way a row can cla
 | `kcn` | Kylacoin | SegWit v0 | `kc1q…` | `m/84'/942'` |
 | `rin` | Rincoin | SegWit v0 | `rin1q…` | `m/84'/9555'` |
 | `lpepe` | LuckyPepe | SegWit v0 | `lpep1q…` | — |
+| `grs` | Groestlcoin | SegWit v0 | `grs1q…` | `m/84'/17'` |
 | `doge` | Dogecoin | P2PKH | `D…` | `m/44'/3'` |
 | `rvn` | Ravencoin | P2PKH | `R…` | `m/44'/175'` |
 | `firo` | Firo | P2PKH | `a…` (most keys) | `m/44'/136'` |
@@ -99,6 +101,7 @@ may carry exactly one of two markers, and a marker is the only way a row can cla
 | `ethw` | EthereumPoW | Ethereum | `0x…` | — |
 | `octa` | OctaSpace | Ethereum | `0x…` | — |
 | `plx` | Parallax | Ethereum | `0x…` | — |
+| `quai` | Quai | Ethereum | `0x00…` | `m/44'/994'` |
 | `cfx` | Conflux | Conflux Core Space (CIP-37) | `cfx:aa…` | — |
 | `xmr` | Monero | CryptoNote | `4…` | — |
 | `zeph` | Zephyr | CryptoNote | `ZEPHYR…` | — |
@@ -117,6 +120,7 @@ may carry exactly one of two markers, and a marker is the only way a row can cla
 | `nock` | Nockchain | Nockchain | no fixed prefix | — |
 | `xel` | Xelis | Xelis | `xel:…` | — |
 | `xtm` | Tari | Tari | `12…` | — |
+| `zano` | Zano | Zano | `Zx…` | — |
 
 These rows need a word of explanation:
 
@@ -218,6 +222,60 @@ These rows need a word of explanation:
   (two seeds: words, entropy, both keys, both address forms) were produced by running that code,
   and words this tool enciphers were decoded by its `CipherSeed::from_mnemonic`. **Not checked:**
   a restore in a Tari wallet app and a pool payout.
+- **`grs`** — Groestlcoin. HASH160 and bech32 are Bitcoin's, so the default `grs1q…` address is
+  the Bitcoin construction under the HRP `grs`. Groestlcoin changed base58check itself: the
+  checksum is the first four bytes of `Groestl512(Groestl512(payload))`, not double SHA-256, so the
+  `--legacy` address (version 36, `F…`) and the WIF (byte 128) differ from Bitcoin's in their last
+  characters, and a Bitcoin WIF for the same key is refused by `restore`. `--testnet` gives
+  `tgrs1q…`, version 111 and WIF byte 239. `--hd` derives at `m/84'/17'`, the path Groestlcoin
+  Core's descriptor wallet uses; `--purpose bip44` gives the `F…` form at `m/44'/17'`, and no
+  Taproot form is offered. Import the WIF with Groestlcoin Core's `importprivkey` or into
+  Electrum-GRS. Source: `Groestlcoin/groestlcoin@17a57752` (MIT), `src/kernel/chainparams.cpp`,
+  `src/base58.cpp`, `src/groestlcoin.h`, `src/groestlcoin-hash.cpp` and
+  `src/wallet/walletutil.cpp`. The known-answer vectors are the `groestlcoinjs-lib` fixtures for
+  two keys, and a recent coinbase payee (`Fr5m2irs…`, block 6355250) decodes under the row's
+  version byte and checksum. **Not checked:** an import into a Groestlcoin wallet and a pool
+  payout.
+- **`quai`** — Quai. The key and the address are Ethereum's (EIP-55 over `Keccak256(pubkey)[12..]`),
+  but Quai reads the first two address bytes as routing: byte 0 is the shard (`0x00` is Cyprus1)
+  and the top bit of byte 1 selects the ledger (clear for Quai, set for Qi). A Cyprus1 Quai pool
+  pays only an address with first byte `0x00` and second byte below `0x80`, about one key in 512,
+  so `new` redraws random keys until one qualifies and prints its `0x`-hex private key, the form
+  Pelagus imports. `restore` of a key outside that scope is an error that names the address, not
+  an address. `new --hd` follows quais.js `getNextAddress(account, Zone.Cyprus1)`: it derives at
+  `m/44'/994'/<account>'/0/<index>` from `--index` (default 0) upwards and prints the first index
+  that qualifies, which a Quai HD wallet reaches the same way. Ethereum's key `0000…0001` mints
+  `0x7E5F…`, outside every Quai zone, so in the table this row is minted from the quais.js vector
+  key at index 139 of the 12-word `abandon … about` phrase. Detection reports the Ethereum family.
+  Sources: `dominant-strategies/go-quai@6561a9f8` (GPL-3.0; nothing taken but the two rules)
+  `common/address.go`; quais.js `@87e02f08` (MIT) `src/wallet/bip44/bip44.ts`,
+  `src/wallet/utils.ts`, `src/wallet/quai-hdwallet.ts`, `src/constants/zones.ts`. The known-answer
+  vectors are quais.js's own output (indices 139 and 918, and the index-139 private key), and two
+  coinbase addresses of Cyprus1 block 6070247 are checked against the scope rule. **Not checked:**
+  an import into Pelagus and a pool payout.
+- **`zano`** — Zano. The secret is a 26-word Zano **seed phrase** from Zano's own 1626-word list,
+  which is neither Monero's list nor BIP39. Words 1 to 24 carry a 32-byte seed, word 25 the week
+  the wallet was made (weeks since 2018-12-01; a restoring wallet scans from it), and word 26 a
+  checksum over the seed and that week. The spend key is the seed and its Keccak-256 reduced
+  modulo the ed25519 group order as one 64-byte integer, the view key is the Keccak-256 of the
+  spend key reduced the same way, and the address is the CryptoNote block-base58 of prefix `0xc5`,
+  both public keys and a Keccak-256 checksum: 97 characters, `Zx…`. The official wallet restores
+  the phrase (`simplewallet --restore-wallet`, or restore from seed phrase in the GUI) and nothing
+  else. `restore --mnemonic "<26 words>" --coin zano` checks the checksum word and re-derives the
+  address; a phrase whose last word sets the auditable flag restores the auditable `aZx…` address,
+  as the wallet does, and the old 25-word form (no checksum word) is accepted as the wallet accepts
+  it. A phrase made with a seed password is refused. `new` also prints the seed as 64 hex
+  characters, which `restore <hex> --coin zano` reads but no Zano wallet imports, so back up the
+  words. In the table the key `0000…0001` stands for that seed. Mainnet only; `new --hd` does not
+  apply (SLIP-44 registers 1018, but Zano wallets derive no BIP44 path). Detection reports `Zx…`
+  and `aZx…` as Zano, never as CryptoNote. Source: `hyle-team/zano@d49f34aa` (MIT; the word list
+  is BSD-3-Clause, see [`THIRD-PARTY.md`](../../THIRD-PARTY.md)), `src/crypto/crypto.cpp`,
+  `src/currency_core/account.cpp`, `currency_format_utils.cpp`, `currency_config.h` and
+  `src/common/mnemonic-encoding.cpp`. The checksum follows the C++, which writes a checksum of
+  813 as 0; `zano-utils-js` does not. The known-answer vectors are the C++ unit test's own phrase
+  and keys (`tests/unit_tests/wallet_seed_test.cpp`), the `zano-utils-js` spend-key-to-address
+  vector, and a generated phrase from an independent Python oracle. **Not checked:** a restore in
+  the official wallet and a pool payout.
 - **`firo`** — one of the two `(most keys)` rows. Version byte `0x52` puts the 25-byte payload
   astride the base58 boundary between digit 32 (`Z`) and digit 33 (`a`): the interval the payload
   can occupy lies 1.222% below that boundary and 98.778% above it, so 98.8% of keys render `a…` and
@@ -231,7 +289,7 @@ These rows need a word of explanation:
   every possible key.
 
 **Testnet.** `--testnet` works where the coin defines one. `--legacy` renders the base58 form for a
-SegWit-default coin (`btc`, `ltc`, `vtc`, `qtc`, `kcn`, `rin`, `lpepe`, `scash`, `alpha`).
+SegWit-default coin (`btc`, `ltc`, `vtc`, `qtc`, `kcn`, `rin`, `lpepe`, `grs`, `scash`, `alpha`).
 
 **Evrmore has no SLIP-44 coin type, so it has no `--hd` path.** Evrmore is a Ravencoin fork that
 changed only the address version byte (33, rendering `E…`) and kept Ravencoin's WIF byte. SLIP-44
@@ -358,7 +416,7 @@ A token sets **bytes, not hashes.** `p2pkh:` always hashes the pubkey with Bitco
 checksums with Bitcoin's SHA256d — right for a Bitcoin-derived chain, wrong for Groestlcoin, whose
 base58check checksum is a double Groestl-512 (`Groestlcoin/groestlcoin`, `src/groestlcoin-hash.cpp`
 and `src/hash.h`). That substitution sits *inside* base58check, below the address layer, so the WIF
-comes out as wrong as the address and no `ver=` repairs either. Decred is not expressible at all: it
+comes out as wrong as the address and no `ver=` repairs either. Use the `grs` row instead. Decred is not expressible at all: it
 hashes with BLAKE-256 and its address version is two bytes where `ver=` takes one (`decred/dcrd`,
 `dcrutil/hash160.go`, `chaincfg/chainhash/hashfuncs.go`, `chaincfg/mainnetparams.go`). The `segwit:`
 token's `--legacy` form and its WIF inherit the same assumption.
@@ -383,6 +441,9 @@ token's `--legacy` form and its WIF inherit the same assumption.
 --coin nock:
 --coin xelis:
 --coin tari:
+--coin groestlcoin:
+--coin quai:
+--coin zano:
 ```
 
 Integers are decimal or `0x`-prefixed hex. An unrecognised parameter is rejected rather than
@@ -436,11 +497,14 @@ GUXByHDZLvU4DnVH9imSFckt3HEQ5cFgE5
 ```
 
 **A CryptoNote fork** — the network prefix is `CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX` in the
-project's `cryptonote_config.h`:
+project's `cryptonote_config.h` (Wownero's is 4146, `wownero-project/wownero`
+`src/cryptonote_config.h`). The token keeps Monero's keys and 25-word seed, so it fits a fork
+that kept them, and not Zano, whose prefix 197 renders the same `Zx…` over different keys: use
+`--coin zano`.
 
 ```sh
-$ forager-wallet inspect 0000…0001 --coin cryptonote:net=197
-ZxByaM2T8UWfjxvvnypP2e8LU1ibmAxDkKYti8jNkuseccSWJnHcz3jSh5gFDmazLoSxLuKU6G8pr6WL4cJDTrAk1cmKr5MF5
+$ forager-wallet inspect 0000…0001 --coin cryptonote:net=4146
+Wo3LCzLgz9UfjxvvnypP2e8LU1ibmAxDkKYti8jNkuseccSWJnHcz3jSh5gFDmazLoSxLuKU6G8pr6WL4cJDTrAk1cmFW5utL
 ```
 
 **Bitcoin Taproot** — the `taproot:` family with Bitcoin's HRP:
@@ -458,12 +522,32 @@ string that is not a valid address for that chain.
 
 - **Nexa** looks CashAddr-like, but its payload framing differs from the Kaspa family, so
   `kaspa:prefix=nexa` yields a valid-looking address that Nexa will not credit.
-- **Radiant**, **Zano**, **Xelis**, **Iron Fish** and **Quai** each use a scheme no family here
-  models. Quai additionally scopes addresses to a shard, so an EIP-55 address from `ethereum:` can
-  land in the wrong zone.
+- **Radiant** uses a scheme no family here models. **Iron Fish** is not supported at all; see
+  [Not supported, and why](#not-supported-and-why).
+- **Quai** scopes addresses to a shard and a ledger, so an EIP-55 address from `ethereum:` lands
+  in the wrong zone 511 times in 512. Use `--coin quai` or `quai:`, which only print a Cyprus1
+  Quai-ledger address.
 - A coin whose legacy P2PKH parameters equal Bitcoin's (Radiant is `ver=0`, `wif=128`) produces
   addresses indistinguishable from Bitcoin's, which also defeats the payout-address pre-flight
   check in the Forager miner.
 
 For those, the address family has to be implemented and KAT-gated. Open an issue rather than
 guessing a token.
+
+## Not supported, and why
+
+These coins have been asked for and are deliberately **not** in the coin table, so `list` does not
+show them and no `--coin` value or custom token reaches them. Generate their addresses with the
+official wallet named here, not with this tool.
+
+| Coin | Why not | Use instead |
+|---|---|---|
+| Abelian (ABEL) | Its addresses are post-quantum lattice keys, and no licensed, audited implementation of its key scheme exists outside the project's own wallet. Reimplementing it here would be the only check of itself. | Abelian Desktop Wallet Pro, or `abewalletmlp` |
+| QRL | Its keys are XMSS hash-based signatures, and there is no audited Rust XMSS implementation to build on. An XMSS key is also stateful: one used outside its own wallet can be made unsafe by reuse. | The official QRL wallet, wallet.theqrl.org |
+| Iron Fish (IRON) | The network went into maintenance mode in April 2026 ([Iron Fish Foundation, 2026-04-20](https://ironfish.network/learn/blog/2026-04-20)), and on 2026-10-30 an inflation vulnerability was disclosed, after which support for the network ended. New payout addresses on that chain are not something to encourage. | The official Iron Fish wallet, if you must |
+| Ryo (RYO) | It is CryptoNote-framed, but its key scheme is not Monero's, so neither the `cryptonote:` token nor any row here derives its keys or its seed correctly. | The official Ryo wallet |
+| Luxcoin (LUX) | The chain is inactive: there is no live network to pay out on. | — |
+
+A coin listed here can move into the table only the way every row did: from the coin's own source
+at a named commit, with known-answer vectors from its reference code, and a live address that the
+row decodes.

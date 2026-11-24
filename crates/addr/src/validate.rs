@@ -5,7 +5,7 @@
 //! (a valid-but-unrecognized address must still run).
 //!
 //! Detection is checksum-verified wherever the scheme has a checksum at all — base58check
-//! double-SHA256, bech32/bech32m polymod, the CashAddr polymod for the Kaspa family, Blake2b-256
+//! double-SHA256 (double Groestl-512 for Groestlcoin), bech32/bech32m polymod, the CashAddr polymod for the Kaspa family, Blake2b-256
 //! for Ergo, Keccak-256 for CryptoNote and for Ethereum's EIP-55 — so a corrupted address is not
 //! answered confidently.
 //!
@@ -26,8 +26,10 @@ use sha2::{Digest, Sha256};
 
 use crate::codec::{base58, bech32, cashaddr, conflux, cryptonote, nock, tari};
 use crate::coins::{
-    Family, FamilyParams, COINS, EPICBOX_VERSION, NOID_ADDRESS_LEN, NOID_HRP, QUANTUS_SS58_PREFIX,
-    TARI_NETWORK_MAINNET, XELIS_HRP, XELIS_HRP_TESTNET, XELIS_SEPARATOR,
+    Family, FamilyParams, COINS, EPICBOX_VERSION, GROESTLCOIN_HRP, GROESTLCOIN_P2PKH_VERSION,
+    GROESTLCOIN_P2PKH_VERSION_TESTNET, NOID_ADDRESS_LEN, NOID_HRP, QUANTUS_SS58_PREFIX,
+    TARI_NETWORK_MAINNET, XELIS_HRP, XELIS_HRP_TESTNET, XELIS_SEPARATOR, ZANO_ADDRESS_PREFIX,
+    ZANO_AUDITABLE_ADDRESS_PREFIX,
 };
 
 /// Characters in a Warthog address: 24 bytes (`hash160(20) ‖ checksum(4)`), two nibbles each.
@@ -49,7 +51,8 @@ const EPICBOX_PAYLOAD_LEN: usize = 35;
 /// quadratic on input somebody else chooses is a denial-of-service shape.
 ///
 /// 128 is the smallest round number comfortably clear of everything detection can legitimately
-/// classify. The longest is a 95-character CryptoNote address
+/// classify. The longest is a 99-character auditable Zano address (`aZx…`, [`zano_family`]); the
+/// longest plain CryptoNote one is 95 characters
 /// (`varint(prefix) ‖ spend(32) ‖ view(32) ‖ checksum(4)` through the block-base58 scheme — see
 /// [`cryptonote_tag`]); a `karlsentest:` version-1 Kaspa address is 75, a bech32m Taproot address
 /// 62, a base58check P2PKH address 35. The margin leaves room for a longer prefix a future coin row
@@ -214,6 +217,12 @@ pub fn detect_family(addr: &str) -> Option<Family> {
             }
         }
 
+        // 4a'. Groestlcoin P2PKH: `version ‖ hash160` under a double-Groestl-512 checksum. See
+        //      [`groestlcoin_p2pkh`].
+        if groestlcoin_p2pkh(&raw) {
+            return Some(Family::P2pkh);
+        }
+
         // 4b. Ergo P2PK: `Base58(prefix ‖ compressed_pubkey(33) ‖ Blake2b256(prefix ‖ pubkey)[..4])`
         //     — 38 bytes, and the only modelled family whose checksum is Blake2b rather than
         //     double-SHA256. Verified, for the reason the Kaspa arm above is: this used to test
@@ -243,6 +252,13 @@ pub fn detect_family(addr: &str) -> Option<Family> {
     //     See [`tari_family`]. Its own arm, because the split encoding does not decode as one
     //     base58 number to the same bytes.
     if let Some(family) = tari_family(a) {
+        return Some(family);
+    }
+
+    // 4d. Zano: CryptoNote's block-base58 layout under Zano's two prefixes, checksum verified. See
+    //     [`zano_family`]. No CryptoNote row carries either prefix, so the arm below never
+    //     claims a Zano address.
+    if let Some(family) = zano_family(a) {
         return Some(family);
     }
 
@@ -372,6 +388,7 @@ pub fn family_name(f: Family) -> &'static str {
         Family::Quantus => "Quantus (SS58 189, qz)",
         Family::Nock => "Nockchain (base58 payee hash, no checksum)",
         Family::Xelis => "Xelis (bech32 xel:)",
+        Family::Zano => "Zano (Zx / aZx)",
         Family::Tari => "Tari (base58 dual address)",
     }
 }
@@ -583,7 +600,24 @@ fn cryptonote_tag(nb: u64) -> (String, usize) {
 fn hrp_is_modelled(hrp: &str) -> bool {
     COINS.iter().any(|c| match c.params {
         FamilyParams::SegwitV0 { hrp: h, .. } | FamilyParams::Taproot { hrp: h, .. } => h == hrp,
+        FamilyParams::Groestlcoin => hrp == GROESTLCOIN_HRP,
         _ => false,
+    })
+}
+
+/// Whether `raw` (an already-base58-decoded string) is a Groestlcoin P2PKH address: a 21-byte
+/// payload `version ‖ hash160` with the mainnet or testnet version byte, followed by
+/// `Groestl512(Groestl512(payload))[..4]`.
+///
+/// Source: `Groestlcoin/groestlcoin@17a57752` `src/base58.cpp` (`DecodeBase58Check` through
+/// `XCoin::HashForAddress`) and `src/kernel/chainparams.cpp` (`PUBKEY_ADDRESS` 36 and 111). The
+/// checksum is what separates this from the SHA256d arm above: no string verifies under both
+/// except by a 2^-32 accident. Detection answers [`Family::P2pkh`], the family, as it does for
+/// every base58 P2PKH coin.
+fn groestlcoin_p2pkh(raw: &[u8]) -> bool {
+    base58::verify_check_groestl(raw).is_some_and(|payload| {
+        payload.len() == 1 + HASH160_LEN
+            && [GROESTLCOIN_P2PKH_VERSION, GROESTLCOIN_P2PKH_VERSION_TESTNET].contains(&payload[0])
     })
 }
 
@@ -708,6 +742,34 @@ fn xelis_family(a: &str) -> Option<Family> {
 fn tari_family(a: &str) -> Option<Family> {
     let bytes = tari::decode(a)?;
     (bytes[0] == TARI_NETWORK_MAINNET).then_some(Family::Tari)
+}
+
+/// Whether `a` is a Zano address: CryptoNote block-base58 decoding to `varint(prefix) ‖ spend(32) ‖
+/// view(32) [‖ flags] ‖ Keccak-256[..4]`, either the normal prefix [`ZANO_ADDRESS_PREFIX`] with no
+/// flags byte (`Zx…`, 97 characters) or the auditable prefix [`ZANO_AUDITABLE_ADDRESS_PREFIX`] with
+/// the flags byte `0x01` (`aZx…`, 99 characters). Integrated addresses (with a payment id) are not
+/// payout addresses and are not claimed.
+///
+/// Source: `hyle-team/zano@d49f34aa` `src/currency_core/currency_format_utils.cpp`
+/// (`get_account_address_as_str`, `get_account_address_and_payment_id_from_str`) and
+/// `src/common/base58.cpp` (Monero's block base58). The keys are not checked to be curve points:
+/// that needs curve arithmetic, which this crate does not contain.
+fn zano_family(a: &str) -> Option<Family> {
+    if !(a.starts_with("Zx") || a.starts_with("aZx")) || !a.bytes().all(is_base58_char) {
+        return None;
+    }
+    let raw = cryptonote::decode(a)?;
+    let (body, checksum) = raw.split_at(raw.len().checked_sub(CRYPTONOTE_CHECKSUM_LEN)?);
+    let (prefix, rest) = cryptonote::read_varint(body)?;
+    let shape_ok = match prefix {
+        ZANO_ADDRESS_PREFIX => rest.len() == CRYPTONOTE_KEYS_LEN,
+        ZANO_AUDITABLE_ADDRESS_PREFIX => {
+            rest.len() == CRYPTONOTE_KEYS_LEN + 1 && rest[CRYPTONOTE_KEYS_LEN] == 0x01
+        }
+        _ => false,
+    };
+    (shape_ok && crate::hash::keccak256(body)[..CRYPTONOTE_CHECKSUM_LEN] == *checksum)
+        .then_some(Family::Zano)
 }
 
 /// Whether a decoded base58check payload is `version ‖ hash160` for a version prefix the coin table
@@ -873,6 +935,13 @@ mod tests {
             // Parallax: miner of blocks 65722-65726, explorer.parallaxprotocol.org. Mixed case, so
             // the EIP-55 checksum is verified.
             ("plx", "0x38432a328b3c6f15582292f7235F17b08A98C6AB", "parallax 65726"),
+            // Quai: the primary coinbase of Cyprus1 zone block 6070247 (`woHeader`) and of one of
+            // its workshares, read with `quai_getBlockByNumber` from rpc.quai.network/cyprus1.
+            ("quai", "0x0011d16c5f4801D8d7B2eD4A84fC98D114Cb85b8", "cyprus1 6070247"),
+            ("quai", "0x00796637A22A9f4Eca22DB25aE3e170b07A7aA6F", "cyprus1 6070247 ws"),
+            // Groestlcoin: coinbase payee of blocks 6355180-6355250 (every tenth block read),
+            // groestlsight.groestlcoin.org/api. The checksum is double Groestl-512.
+            ("grs", "Fr5m2irs9vNWSAFXJK6KPtxqW9YWg384FX", "groestlsight 6355250"),
             // Opacra: DEV_FUND_ADDRESS, opacra/opacra@66380059 src/cryptonote_config.h, also
             // shown on explorer.opacra.org.
             (
@@ -928,6 +997,25 @@ mod tests {
                 }
                 FamilyParams::Ethereum => {
                     assert_eq!(detected, Some(Family::Ethereum), "{ticker} {addr}");
+                }
+                FamilyParams::Quai => {
+                    assert_eq!(detected, Some(Family::Ethereum), "{ticker} {addr}");
+                    let bytes: [u8; 20] = crate::hexbytes::decode_n(&addr[2..]).unwrap();
+                    assert!(
+                        crate::coins::quai_payout_scope(&bytes),
+                        "{ticker} {addr} ({src}): not Cyprus1 / Quai ledger"
+                    );
+                }
+                FamilyParams::Groestlcoin => {
+                    assert_eq!(base58::decode_check(addr), None, "{ticker} {addr}: SHA256d");
+                    let payload = base58::decode_check_groestl(addr)
+                        .unwrap_or_else(|| panic!("{ticker} {addr} ({src}): bad checksum"));
+                    assert_eq!(payload.len(), 1 + HASH160_LEN, "{ticker} {addr}");
+                    assert_eq!(
+                        payload[0], GROESTLCOIN_P2PKH_VERSION,
+                        "{ticker} {addr} ({src})"
+                    );
+                    assert_eq!(detected, Some(Family::P2pkh), "{ticker} {addr}");
                 }
                 _ => panic!("{ticker}: no live-address rule for this family"),
             }
@@ -2129,5 +2217,95 @@ mod tests {
                 expected: Family::CryptoNote
             }
         ));
+    }
+
+    /// Groestlcoin's two forms, from the `groestlcoinjs-lib` fixtures for private key 1 and
+    /// `2bfe58ab…f69a3e` (`test/fixtures/address.json`, `p2wpkh.json`): the bech32 form is SegWit
+    /// v0 under HRP `grs`, the base58 form is P2PKH under the Groestl checksum. A testnet base58
+    /// address (version 111) is P2PKH too. Every single-character substitution of the base58 form
+    /// fails both checksums, so none is answered P2PKH.
+    #[test]
+    fn detects_groestlcoin_both_forms() {
+        for a in [
+            "grs1qw508d6qejxtdg4y5r3zarvary0c5xw7k3k4sj5",
+            "grs1qu89g059an9axesxp23ke8narm5g0t9vxd5uetv",
+        ] {
+            assert_eq!(detect_family(a), Some(Family::SegwitV0), "{a}");
+        }
+        for a in [
+            "Ffqz14cyvZYJavD76t6oHNDJnGiWcZMVxR",
+            "Fqkb79441DFz6Tj95CkATJP9qYAwPic4Ps",
+            "mrCDrCybB6J1vRfbwM5hemdJz73FuCDVWf",
+        ] {
+            assert_eq!(detect_family(a), Some(Family::P2pkh), "{a}");
+            assert_eq!(check(a, Family::SegwitV0), Verdict::Ok, "{a}");
+        }
+        let a = "Ffqz14cyvZYJavD76t6oHNDJnGiWcZMVxR";
+        for pos in 0..a.len() {
+            let mut bad = a.as_bytes().to_vec();
+            bad[pos] = if bad[pos] == b'2' { b'3' } else { b'2' };
+            let bad = String::from_utf8(bad).unwrap();
+            assert_ne!(detect_family(&bad), Some(Family::P2pkh), "{bad}");
+        }
+        // The Bitcoin-checksummed spelling of the same `36 ‖ hash160` is not a Groestlcoin address
+        // and no modelled row carries version 36, so it is not P2PKH either.
+        let hash160 = crate::hexbytes::decode("751e76e8199196d454941c45d1b3a323f1433bd6").unwrap();
+        let mut payload = vec![GROESTLCOIN_P2PKH_VERSION];
+        payload.extend_from_slice(&hash160);
+        assert_eq!(detect_family(&base58::encode_check(&payload)), None);
+    }
+
+    /// Zano addresses: the C++ unit-test keys' normal and auditable addresses, the
+    /// `zano-utils-js` vector, and the generated-seed vector of `forager-wallet`'s `families/zano.rs`.
+    const ZANO_ADDRESSES: [&str; 4] = [
+        "ZxDachPpH6Wc6PU36Se55dPEWd2SjkZQaNRrbCZJQihw2M5YYfeSsogUncHPCHDkG3XYGviMCXoWrNqvUz6QUJyw13Gemoa6u",
+        "aZxbFpPZMLTM3QBvFLgNXu4S4cFnru9Lz3bNg6oxtXxyL5FNavPBvpGcQG4UgDHaw4XE9PAJFDikCdiXMCPU3QUvc8SGZQwdbWo",
+        "ZxDFpn4k7xVYyc9VZ3LphrJbkpc46xfREace5bme1aXiMzKPAHA8jsTWcHSXhv9AdodSaoGXK9Mg7bk3ec4FkQrj357fZPWZX",
+        "ZxCrb7RQme5crtLnBWbd1SDCxFWaqSeMVVrVDaQanwdPBuUcWX2mWdKRR2NS7Smi6yZ2pWhgrjcLpPvxFoEGEUq71g1X7RwaP",
+    ];
+
+    #[test]
+    fn detects_zano_normal_and_auditable() {
+        for a in ZANO_ADDRESSES {
+            assert_eq!(detect_family(a), Some(Family::Zano), "{a}");
+            assert_eq!(check(a, Family::Zano), Verdict::Ok);
+            assert!(matches!(
+                check(a, Family::CryptoNote),
+                Verdict::Mismatch {
+                    detected: Family::Zano,
+                    ..
+                }
+            ));
+        }
+        assert_eq!(ZANO_ADDRESSES[0].len(), 97);
+        assert_eq!(ZANO_ADDRESSES[1].len(), 99);
+    }
+
+    #[test]
+    fn a_corrupted_zano_address_is_not_zano() {
+        for a in ZANO_ADDRESSES {
+            for pos in 0..a.len() {
+                let mut bad = a.as_bytes().to_vec();
+                bad[pos] = if bad[pos] == b'2' { b'3' } else { b'2' };
+                let bad = String::from_utf8(bad).unwrap();
+                assert_ne!(detect_family(&bad), Some(Family::Zano), "{bad}");
+            }
+        }
+        // The normal prefix with a flags byte, and the auditable prefix without one, are not
+        // addresses the wallet prints.
+        let keys = [7u8; 64];
+        for (prefix, flags) in [
+            (ZANO_ADDRESS_PREFIX, Some(0x01u8)),
+            (ZANO_AUDITABLE_ADDRESS_PREFIX, None),
+            (ZANO_AUDITABLE_ADDRESS_PREFIX, Some(0x00)),
+        ] {
+            let mut body = Vec::new();
+            cryptonote::write_varint(prefix, &mut body);
+            body.extend_from_slice(&keys);
+            body.extend(flags);
+            let ck = crate::hash::keccak256(&body);
+            body.extend_from_slice(&ck[..4]);
+            assert_eq!(detect_family(&cryptonote::encode(&body)), None);
+        }
     }
 }

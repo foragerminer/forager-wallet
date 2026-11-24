@@ -45,13 +45,15 @@
 //! file), so a `../addr/src` path would make `cargo test` fail for anyone building from a
 //! downloaded `.crate`, where no sibling crate exists.
 //!
-//! The two word-list files are DATA, not code, and are excluded from the identifier scan to avoid
+//! The three word-list files are DATA, not code, and are excluded from the identifier scan to avoid
 //! false positives on legitimate dictionary words that happen to appear in any of the above
 //! codebases:
 //!   - `wordlist_en.rs` — Monero's 1626-word CryptoNote list
 //!   - `wordlist_bip39_en.rs` — the official BIP-39 English 2048-word list
+//!   - `wordlist_zano_en.rs` — Zano's 1626-word list (Electrum v1), from its
+//!     `src/common/mnemonic-encoding.cpp`
 //!
-//! Both are vendored verbatim from their published sources *because* they are data: the word
+//! All three are vendored verbatim from their published sources *because* they are data: the word
 //! order is consensus-critical and cannot be independently derived, so "clean-room" has no meaning
 //! for them. What the guard does police is the surrounding code — in particular the BIP-39
 //! implementation in `src/bip39.rs`, which is written from the specification text and must not
@@ -66,7 +68,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// The pure-data files excluded from the identifier scan. See the module docs.
-const WORDLIST_FILES: &[&str] = &["wordlist_en.rs", "wordlist_bip39_en.rs"];
+const WORDLIST_FILES: &[&str] = &[
+    "wordlist_en.rs",
+    "wordlist_bip39_en.rs",
+    "wordlist_zano_en.rs",
+];
 
 /// Each entry is a distinctive symbol that would appear in our source *only* if code
 /// was copy-pasted or transcribed from the named reference.  Independently derived
@@ -76,7 +82,8 @@ const TAINTED: &[(&str, &str)] = &[
     //
     // `curve25519-dalek` is a declared dependency since Xelis (`src/families/xelis.rs`), which
     // calls it through `CompressedRistretto` and `Scalar` and never names its point types. Tari
-    // (`src/families/tari.rs`) calls it through `Scalar` and `RISTRETTO_BASEPOINT_POINT` only. These
+    // (`src/families/tari.rs`) calls it through `Scalar` and `RISTRETTO_BASEPOINT_POINT` only, and
+    // Zano (`src/families/zano.rs`) through `Scalar` only. These
     // entries still guard the clean-room Ed25519 code, which must not borrow from it. If a future
     // caller of the dependency needs one of these names, narrow the scan for that file rather
     // than deleting the entry.

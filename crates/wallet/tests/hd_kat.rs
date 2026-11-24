@@ -644,6 +644,76 @@ fn source_verified_segwit_rows_bip84_bip86_vectors() {
     }
 }
 
+/// Groestlcoin at SLIP-44 17, BIP84 (its native purpose, the path Groestlcoin Core's descriptor
+/// wallet uses: `Groestlcoin/groestlcoin@17a57752` `src/wallet/walletutil.cpp` L56, L75) and BIP44.
+/// The WIF and the `F…` address carry the double-Groestl-512 checksum. Expected values come from a
+/// from-scratch Python oracle (BIP32, secp256k1, bech32, with Groestl from the C
+/// `groestlcoin_hash` module) that first reproduced the BIP84 spec vector and the
+/// `groestlcoinjs-lib` private-key-1 fixtures. Index 1 is asserted too, through the same mnemonic.
+#[test]
+fn grs_bip84_and_bip44_vectors() {
+    for (purpose, index, addr, wif) in [
+        (
+            hd::Purpose::Bip84,
+            0,
+            "grs1qza0fp7c2k4r8lqsxvz97fa0yfv247qq2lrmssp",
+            "L4Sn2vaxTtRDYa1YSSeArgH2idH2YRhRdPRuajHbevTLGgwFMoS4",
+        ),
+        (
+            hd::Purpose::Bip84,
+            1,
+            "grs1qpuehxxhkpvpk25pedvp9w0evak2xt7gync83pu",
+            "L3FAnXMMfZoKBDnrX1kj6tkNTSChu6wvJBm3dDpf1J7CzBmbSBEK",
+        ),
+        (
+            hd::Purpose::Bip44,
+            0,
+            "FejEey9oUiHDzTKvhYmWirmwJrHe9XshNT",
+            "L1Wg2Vz9zAmeTD52U8PGkibZ7jb3LhYSuGtBdmKosuLezPKeKVkH",
+        ),
+    ] {
+        let coin = hd::lookup("grs").expect("grs is HD-capable");
+        let acct = hd::derive(ABANDON, "", coin, purpose, 0, index).unwrap();
+        assert_eq!(
+            acct.path,
+            format!("m/{}'/17'/0'/0/{index}", purpose.number())
+        );
+        assert_eq!(acct.address, addr, "grs {purpose} {index}");
+        assert_eq!(acct.secret_str(), wif, "grs {purpose} {index}");
+    }
+    // The 12-word phrase BIP84 publishes against, at m/84'/17'/0'/0/0.
+    let coin = hd::lookup("grs").unwrap();
+    let acct = hd::derive(ABANDON_12, "", coin, hd::Purpose::Bip84, 0, 0).unwrap();
+    assert_eq!(acct.address, "grs1qrm2uggqj846nljryvmuga56vtwfey0dtnc4z55");
+    assert_eq!(
+        acct.secret_str(),
+        "L4mSsRa7DVFMez7MxcL9cV5ZxeKdMJpJmqJtdcGDz9oJM6sQsNz2"
+    );
+    // No Taproot form is offered for Groestlcoin.
+    assert!(hd::derive(ABANDON, "", coin, hd::Purpose::Bip86, 0, 0).is_err());
+}
+
+/// Quai at SLIP-44 994, against quais.js@87e02f08 itself: `QuaiHDWallet.fromMnemonic` of the
+/// 12-word `abandon … about` phrase, `getNextAddress(0, Zone.Cyprus1)` twice. The first Cyprus1
+/// Quai-ledger address is index 139; the next one after it is index 918. Indices 0..139 all derive
+/// addresses outside that scope and are skipped, as `deriveNextAddressNode` skips them.
+#[test]
+fn quai_cyprus1_vectors_skip_to_the_first_in_scope_index() {
+    let coin = hd::lookup("quai").expect("quai is HD-capable");
+    let first = hd::derive(ABANDON_12, "", coin, hd::Purpose::Bip44, 0, 0).unwrap();
+    assert_eq!(first.path, "m/44'/994'/0'/0/139");
+    assert_eq!(first.address, "0x000B2E36297c1b133Ca1DCA9881Dc820018f1F79");
+    assert_eq!(
+        first.secret_str(),
+        "0x1fc6218883bef255c4a260ad754511db8ffa0fd9053c8ccfd7f9675682fc9233"
+    );
+    let same = hd::derive(ABANDON_12, "", coin, hd::Purpose::Bip44, 0, 139).unwrap();
+    assert_eq!(same.address, first.address);
+    let next = hd::derive(ABANDON_12, "", coin, hd::Purpose::Bip44, 0, 140).unwrap();
+    assert_eq!(next.path, "m/44'/994'/0'/0/918");
+    assert_eq!(next.address, "0x0057F8e659B16f7956249B87F09f57fF64847AbF");
+}
+
 // BIP86 — Taproot key-path at m/86'. The oracle's Taproot tweak was anchored against this crate's
 // own `KAT_PRL` / `KAT_TPRL` pearl vectors before these values were derived.
 #[test]
@@ -725,9 +795,11 @@ fn native_purpose_matches_single_key_address_type() {
         ("btc", hd::Purpose::Bip84),
         ("ltc", hd::Purpose::Bip84),
         ("vtc", hd::Purpose::Bip84),
+        ("grs", hd::Purpose::Bip84),
         ("doge", hd::Purpose::Bip44),
         ("firo", hd::Purpose::Bip44),
         ("eth", hd::Purpose::Bip44),
+        ("quai", hd::Purpose::Bip44),
     ] {
         let coin = hd::lookup(sym).unwrap();
         assert_eq!(hd::native_purpose(coin), Some(want), "{sym}");

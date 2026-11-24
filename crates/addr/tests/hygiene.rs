@@ -15,13 +15,20 @@
 
 /// The complete allowed external dependency set.
 ///
-/// `sha2` computes the base58check checksum and `blake2b_simd` the Ergo P2PK one. `num-bigint` and
+/// `sha2` computes the base58check checksum, `blake2b_simd` the Ergo P2PK one and `groestl` the
+/// Groestlcoin base58check one (double Groestl-512 in place of double SHA-256). `num-bigint` and
 /// `num-traits` do base58's decode arithmetic — base58's alphabet is not a power of two, so the
-/// conversion needs bignums. None of the four carries an entropy source, curve arithmetic or a
+/// conversion needs bignums. None of the five carries an entropy source, curve arithmetic or a
 /// network.
 ///
 /// Adding to this list is a deliberate decision, not an accident. Read the spec before changing it.
-const ALLOWED: &[&str] = &["sha2", "blake2b_simd", "num-bigint", "num-traits"];
+const ALLOWED: &[&str] = &[
+    "sha2",
+    "blake2b_simd",
+    "num-bigint",
+    "num-traits",
+    "groestl",
+];
 
 /// Parse the crate's declared dependencies out of a manifest, in either shape a manifest for this
 /// crate comes in.

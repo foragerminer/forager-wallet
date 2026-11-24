@@ -33,6 +33,12 @@ blake2b_simd = "1"
 # above, which is about key generation, not about integers.
 num-bigint = "0.4"
 num-traits = "0.2"
+# Groestl-512, for the Groestlcoin base58check checksum (double Groestl-512, the first four bytes:
+# `Groestlcoin/groestlcoin` `src/base58.cpp` → `XCoin::HashForAddress`). A third hash for a third
+# checksum scheme, parallel to `sha2` and `blake2b_simd`: no curve, no entropy source, no wordlist.
+# RustCrypto, MIT OR Apache-2.0, on the same `digest` 0.11 as `sha2`. No default features: `alloc`
+# is unused.
+groestl = { version = "0.11", default-features = false }
 
 # Copied from the workspace `[workspace.lints]` rather than inherited, for the same reason as
 # `edition`/`license` above.

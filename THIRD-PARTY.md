@@ -9,7 +9,7 @@ Crates offered under `MIT OR Apache-2.0` are used here under **Apache-2.0**, who
 is in [`LICENSE`](LICENSE) at the repository root. Their MIT text is still reproduced where the
 crate ships one, so the notice is preserved either way.
 
-Generated from `cargo metadata`. 88 third-party packages.
+Generated from `cargo metadata`. 89 third-party packages.
 
 ## Summary
 
@@ -53,6 +53,7 @@ Generated from `cargo metadata`. 88 third-party packages.
 | `find-msvc-tools` | 0.1.15 | MIT OR Apache-2.0 |
 | `generic-array` | 0.14.7 | MIT |
 | `getrandom` | 0.4.3 | MIT OR Apache-2.0 |
+| `groestl` | 0.11.0 | MIT OR Apache-2.0 |
 | `group` | 0.14.0 | MIT/Apache-2.0 |
 | `hmac` | 0.13.0 | MIT OR Apache-2.0 |
 | `hybrid-array` | 0.4.15 | MIT OR Apache-2.0 |
@@ -1471,6 +1472,40 @@ SOFTWARE.
 ```
 Copyright (c) 2018-2026 The rust-random Project Developers
 Copyright (c) 2014 The Rust Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
+### groestl 0.11.0 — MIT OR Apache-2.0
+
+<https://github.com/RustCrypto/hashes>
+
+`LICENSE-MIT`:
+
+```
+Copyright (c) 2020-2026 The RustCrypto Project Developers
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
@@ -3369,7 +3404,49 @@ Not a crate dependency, so `cargo metadata` does not list it.
 |---|---|---|---|---|
 | [Parano1d](https://git.parano1d.org/ignotusnemo/parano1d) | `52938433` | Apache-2.0 | Poseidon2b round constants, MDS entries and tower/flat change-of-basis tables; the address and master-to-spend derivations | `crates/wallet/src/poseidon2b/`, `crates/wallet/src/families/noid.rs` |
 | [Nockchain](https://github.com/zorp-corp/nockchain) | `ed1edfcc` | MIT OR Apache-2.0, used under Apache-2.0 | Tip5 lookup table, round constants and MDS column; Cheetah generator and group order; the SLIP-10 master-key, public-key and payee-hash constructions; the Hoon known-answer vectors | `crates/wallet/src/nock/`, `crates/wallet/src/families/nock.rs`, `crates/addr/src/codec/nock.rs` |
+| [Zano](https://github.com/hyle-team/zano) | `d49f34aa` | BSD-3-Clause (the file's header; the repository is MIT) | The 1626-word seed-phrase word list, verbatim and in order, from `src/common/mnemonic-encoding.cpp` | `crates/wallet/src/wordlist_zano_en.rs` |
 
 Apache-2.0's full text is in [`LICENSE`](LICENSE). The attribution notices it requires, Parano1d's
 own and the hekate-math and binius64 notices it carries, are reproduced in [`NOTICE`](NOTICE), as is the
 Nockchain attribution (that repository ships no NOTICE file of its own).
+
+The Zano word list is data, not code, and is used under the BSD-3-Clause license in the header of
+the file it comes from, reproduced verbatim:
+
+```
+// Copyright (c) 2014, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+/*
+ * This file and its cpp file are for translating Electrum-style word lists
+ * into their equivalent byte representations for cross-compatibility with
+ * that method of "backing up" one's wallet keys.
+ */
+// Copyright (c) 2014-2018 Zano Project
+// Copyright (c) 2014-2018 The Louisdor Project
+```

@@ -46,6 +46,7 @@ mod secret;
 // list (used by `bip39`). They share a language and nothing else.
 mod wordlist_bip39_en;
 mod wordlist_en;
+mod wordlist_zano_en;
 
 // Address classification and the coin table live in the `wallet-addr` crate, which deliberately
 // depends on no curve, entropy or mnemonic code. They are re-exported here so that every existing
@@ -103,6 +104,11 @@ pub enum SecretStd {
     /// 32-char hex [`Wallet::secret_hex`] is the seed's 16 bytes of entropy, which alone fix the
     /// keys but which the official wallet cannot import.
     TariSeed(String),
+    /// A Zano seed phrase: 26 words from Zano's own 1626-word list (not Monero's, not BIP39),
+    /// space-separated, the secret the official wallet restores from. The 64-char hex
+    /// [`Wallet::secret_hex`] is the 32-byte seed the first 24 words carry, which re-derives the
+    /// address here but which no Zano wallet imports.
+    ZanoSeed(String),
 }
 
 /// A generated or derived payout wallet.
@@ -139,6 +145,9 @@ pub enum WalletError {
     BadMnemonic(String),
     /// A Tari secret was not 32 hex characters (the CipherSeed's 16 bytes of entropy).
     BadTariEntropy,
+    /// A valid secp256k1 key whose Quai address (carried) is outside the Cyprus1 zone or in the Qi
+    /// ledger, so a Cyprus1 Quai pool cannot pay it.
+    QuaiOutOfScope(String),
 }
 
 impl std::fmt::Display for WalletError {
@@ -157,6 +166,12 @@ impl std::fmt::Display for WalletError {
             }
             WalletError::BadCoinToken(m) => write!(f, "bad coin token: {m}"),
             WalletError::BadMnemonic(m) => write!(f, "invalid mnemonic: {m}"),
+            WalletError::QuaiOutOfScope(a) => write!(
+                f,
+                "this key's Quai address {a} is not a Cyprus1 Quai-ledger address (it needs first \
+                 byte 0x00 and second byte below 0x80), so a Quai pool cannot pay it. Generate a \
+                 key with `new --coin quai`, which only prints one that qualifies"
+            ),
             WalletError::BadTariEntropy => f.write_str(
                 "a Tari secret is the seed entropy, 32 hex characters (16 bytes); restore the \
                  24 words with --mnemonic",
@@ -243,6 +258,18 @@ pub fn address_from_secret_kind(
         let sk = families::xelis::parse_secret_key(secret_hex).ok_or(WalletError::BadPrivKeyHex)?;
         return xelis_wallet(&spec, &sk, net);
     }
+    // A Zano secret given as hex is the 32-byte seed its phrase carries; the phrase itself goes
+    // through `address_from_mnemonic`. The address is the normal (`Zx…`) one.
+    if spec.family() == Family::Zano {
+        if net == Network::Testnet {
+            return Err(WalletError::UnsupportedTestnet);
+        }
+        let mut seed =
+            hexbytes::decode_n::<32>(secret_hex.trim()).ok_or(WalletError::BadPrivKeyHex)?;
+        let w = zano_wallet(&spec, &seed, false, None);
+        zeroize::Zeroize::zeroize(&mut seed);
+        return Ok(w);
+    }
     // A Tari secret is the CipherSeed's 16 bytes of entropy, from which both keys are hashed.
     if spec.family() == Family::Tari {
         if net == Network::Testnet {
@@ -254,7 +281,16 @@ pub fn address_from_secret_kind(
         zeroize::Zeroize::zeroize(&mut entropy);
         return Ok(w);
     }
-    let priv32 = parse_secret(secret_hex)?;
+    // A Groestlcoin WIF carries a double-Groestl-512 checksum, so the SHA256d WIF reader in
+    // `parse_secret` cannot read it, and a Bitcoin WIF is refused rather than guessed at.
+    let priv32 = if matches!(spec.params, coins::FamilyParams::Groestlcoin) {
+        let s = secret_hex.trim();
+        hexbytes::decode_n::<32>(s)
+            .or_else(|| families::groestlcoin::from_wif(s))
+            .ok_or(WalletError::BadPrivKeyHex)?
+    } else {
+        parse_secret(secret_hex)?
+    };
     let d = curves::secp256k1::scalar_in_range(&priv32)?;
     build_wallet(&spec, &d, &priv32, net, legacy)
 }
@@ -302,6 +338,23 @@ pub fn generate(coin: &str, net: Network) -> Result<Wallet, WalletError> {
             return w;
         }
     }
+    if spec.family() == Family::Zano {
+        if net == Network::Testnet {
+            return Err(WalletError::UnsupportedTestnet);
+        }
+        // `account_base::generate`: 32 random bytes are the seed, and the phrase records the
+        // creation time, which a restoring wallet scans from.
+        let mut seed = [0u8; 32];
+        getrandom::fill(&mut seed).map_err(|_| WalletError::Entropy)?;
+        let phrase = families::zano::phrase(&seed, families::zano::now()).ok_or_else(|| {
+            WalletError::BadMnemonic(
+                "the clock is past the last week a Zano timestamp word can hold".into(),
+            )
+        });
+        let w = phrase.map(|p| zano_wallet(&spec, &seed, false, Some(p)));
+        zeroize::Zeroize::zeroize(&mut seed);
+        return w;
+    }
     if spec.family() == Family::Tari {
         if net == Network::Testnet {
             return Err(WalletError::UnsupportedTestnet);
@@ -325,7 +378,15 @@ pub fn generate(coin: &str, net: Network) -> Result<Wallet, WalletError> {
         let Ok(d) = curves::secp256k1::scalar_in_range(&buf) else {
             continue;
         };
-        return build_wallet(&spec, &d, &buf, net, false);
+        // A Quai key is redrawn until its address is in Cyprus1 and the Quai ledger, about one key
+        // in 512, as quais.js's `deriveNextAddressNode` steps the index until one is.
+        return match build_wallet(&spec, &d, &buf, net, false) {
+            Err(WalletError::QuaiOutOfScope(_)) => {
+                zeroize::Zeroize::zeroize(&mut buf);
+                continue;
+            }
+            w => w,
+        };
     }
 }
 
@@ -370,12 +431,21 @@ fn noid_wallet(spec: &coins::CoinSpec, master: &[u8; 32]) -> Wallet {
 /// For Nockchain the phrase is BIP39 (12 to 24 words, empty passphrase, the official wallet's
 /// import), and the address is the master key's v1 pkh. For Tari it is the 24-word CipherSeed
 /// (no passphrase), and the address is the one-sided mainnet dual address; deciphering runs
-/// Argon2 over 46 MiB once.
+/// Argon2 over 46 MiB once. For Zano it is the 26-word seed phrase of Zano's own word list (or the
+/// old 25-word form), with no password, and the address is the normal or, if the phrase says so,
+/// the auditable one.
 ///
-/// Only those two families take a bare phrase. Every other coin derives from a BIP44 path instead
+/// Only those three families take a bare phrase. Every other coin derives from a BIP44 path instead
 /// (see [`hd::derive`]), so it reports [`WalletError::BadMnemonic`] here.
 pub fn address_from_mnemonic(coin: &str, phrase: &str) -> Result<Wallet, WalletError> {
     let spec = resolve_spec(coin)?;
+    // A Zano phrase is 26 words of Zano's own list (25 for the old form), not BIP39. An auditable
+    // flag in its last word restores the auditable (`aZx…`) address, as the official wallet does.
+    if spec.family() == Family::Zano {
+        let r = families::zano::from_phrase(phrase).map_err(WalletError::BadMnemonic)?;
+        let canonical = phrase.split_whitespace().collect::<Vec<_>>().join(" ");
+        return Ok(zano_wallet(&spec, &r.seed, r.auditable, Some(canonical)));
+    }
     // A Tari phrase is a CipherSeed, not BIP39: it is deciphered (CRC, Argon2, MAC) to its entropy.
     if spec.family() == Family::Tari {
         let seed = families::tari::CipherSeed::from_phrase(phrase)
@@ -447,6 +517,31 @@ fn xelis_wallet(
         secret_hex: hexbytes::encode(sk),
         secret_std: SecretStd::RawHex(hexbytes::encode(sk)),
     })
+}
+
+/// Assemble the [`Wallet`] for a Zano seed. `phrase` is the seed phrase, when there is one; a
+/// wallet built from the bare seed prints the seed. `privkey` holds the spend private key, and
+/// `secret_hex` the 64-char hex seed.
+fn zano_wallet(
+    spec: &coins::CoinSpec,
+    seed: &[u8; 32],
+    auditable: bool,
+    phrase: Option<String>,
+) -> Wallet {
+    let (spend, mut view) = families::zano::private_keys(seed);
+    let address = families::zano::address_from_keys(&spend, &view, auditable);
+    zeroize::Zeroize::zeroize(&mut view);
+    let secret_hex = hexbytes::encode(seed);
+    Wallet {
+        coin: spec.ticker,
+        address,
+        privkey: spend,
+        secret_std: match phrase {
+            Some(p) => SecretStd::ZanoSeed(p),
+            None => SecretStd::RawHex(secret_hex.clone()),
+        },
+        secret_hex,
+    }
 }
 
 /// Assemble the [`Wallet`] for a Tari seed's entropy. `phrase` is the 24-word CipherSeed it came
@@ -548,6 +643,12 @@ pub(crate) fn dispatch(
         // Tari: the secret is 16 bytes of seed entropy, not a 32-byte key, so no 32-byte input
         // has a Tari address. `address_from_secret_kind` and `generate` route Tari before here.
         coins::FamilyParams::Tari => return Err(WalletError::BadTariEntropy),
+        // Zano: the input bytes are the 32-byte seed; `d` is unused. Mainnet only.
+        // `address_from_secret_kind` and `generate` route Zano before here; this arm agrees.
+        coins::FamilyParams::Zano => match net {
+            Network::Mainnet => families::zano::address(priv32, false),
+            Network::Testnet => return Err(WalletError::UnsupportedTestnet),
+        },
 
         coins::FamilyParams::SegwitV0 {
             hrp,
@@ -568,6 +669,17 @@ pub(crate) fn dispatch(
                 *priv32,
             ));
         }
+        // Groestlcoin: SegWit v0 with Bitcoin's bytes replaced by its own and base58check's
+        // SHA256d replaced by double Groestl-512, in the legacy address and the WIF alike. Testnet
+        // has its own HRP, version and WIF bytes.
+        coins::FamilyParams::Groestlcoin => {
+            let testnet = net == Network::Testnet;
+            return Ok((
+                families::groestlcoin::address(d, testnet, legacy),
+                SecretStd::Wif(families::groestlcoin::wif(priv32, testnet)),
+                *priv32,
+            ));
+        }
         coins::FamilyParams::P2pkh {
             version,
             version_testnet,
@@ -581,6 +693,12 @@ pub(crate) fn dispatch(
                 SecretStd::Wif(secret::wif(priv32, wif, compressed)),
                 *priv32,
             ));
+        }
+        // Quai: Ethereum's address and secret form, refused outside Cyprus1 / the Quai ledger.
+        // Network-agnostic like Ethereum.
+        coins::FamilyParams::Quai => {
+            let addr = families::quai::address(d).map_err(WalletError::QuaiOutOfScope)?;
+            return Ok((addr, SecretStd::EthHex(secret::eth_hex(priv32)), *priv32));
         }
         coins::FamilyParams::Ethereum => {
             // Ethereum addresses are network-agnostic at the derivation level.
@@ -921,6 +1039,7 @@ mod tests {
             ("noid:", "noid"),
             ("quantus:", "quan"),
             ("xelis:", "xel"),
+            ("groestlcoin:", "grs"),
         ] {
             let t = address_from_secret(token, PRIV1, Network::Mainnet).unwrap();
             let r = address_from_secret(ticker, PRIV1, Network::Mainnet).unwrap();
@@ -1795,6 +1914,138 @@ mod tests {
             g.address
         );
         assert_eq!(detect_family(&g.address), Some(Family::Tari));
+    }
+
+    /// Zano through the public seam: the C++ unit-test phrase and its auditable twin, the generated
+    /// phrase vector from its words and from its seed hex, the `zano:` token, a fresh phrase's
+    /// round trip, and the refusals (testnet, a corrupted phrase).
+    #[test]
+    fn zano_through_the_public_seam() {
+        use families::zano::tests::{
+            SEQ_ADDRESS, SEQ_PHRASE, SEQ_SEED, UNIT_ADDRESS, UNIT_AUDITABLE_PHRASE, UNIT_PHRASE,
+        };
+        let line = |p: &str| p.split_whitespace().collect::<Vec<_>>().join(" ");
+        let w = address_from_mnemonic("zano", &line(UNIT_PHRASE)).unwrap();
+        assert_eq!(w.address, UNIT_ADDRESS);
+        assert_eq!(w.secret_std, SecretStd::ZanoSeed(line(UNIT_PHRASE)));
+        let a = address_from_mnemonic("zano", &line(UNIT_AUDITABLE_PHRASE)).unwrap();
+        assert!(a.address.starts_with("aZx"), "{}", a.address);
+        assert_eq!(detect_family(&a.address), Some(Family::Zano));
+
+        let w = address_from_mnemonic("zano", &line(SEQ_PHRASE)).unwrap();
+        assert_eq!(w.address, SEQ_ADDRESS);
+        assert_eq!(w.secret_hex, SEQ_SEED);
+        let h = address_from_secret("zano", SEQ_SEED, Network::Mainnet).unwrap();
+        assert_eq!(h.address, SEQ_ADDRESS);
+        assert_eq!(h.secret_std, SecretStd::RawHex(SEQ_SEED.into()));
+        let t = address_from_secret("zano:", SEQ_SEED, Network::Mainnet).unwrap();
+        assert_eq!(t.address, SEQ_ADDRESS);
+        assert_eq!(
+            address_from_secret("zano", SEQ_SEED, Network::Testnet).err(),
+            Some(WalletError::UnsupportedTestnet)
+        );
+        let mut words: Vec<String> = line(SEQ_PHRASE).split(' ').map(String::from).collect();
+        words.swap(3, 4);
+        assert!(matches!(
+            address_from_mnemonic("zano", &words.join(" ")),
+            Err(WalletError::BadMnemonic(_))
+        ));
+
+        let g = generate("zano", Network::Mainnet).unwrap();
+        let SecretStd::ZanoSeed(phrase) = &g.secret_std else {
+            panic!("a minted Zano wallet carries its seed phrase")
+        };
+        assert_eq!(phrase.split(' ').count(), 26);
+        assert!(g.address.starts_with("Zx"), "{}", g.address);
+        assert_eq!(
+            address_from_mnemonic("zano", phrase).unwrap().address,
+            g.address
+        );
+        assert_eq!(
+            address_from_secret("zano", &g.secret_hex, Network::Mainnet)
+                .unwrap()
+                .address,
+            g.address
+        );
+        assert_eq!(detect_family(&g.address), Some(Family::Zano));
+    }
+
+    /// Quai through the public seam: the quais.js Cyprus1 key derives its address with an `0x` hex
+    /// secret, the `quai:` token agrees, Ethereum's private-key-1 address is refused by name, and
+    /// every generated key lands in Cyprus1 and the Quai ledger.
+    #[test]
+    fn quai_through_the_public_seam() {
+        use families::quai::tests::{VECTOR_ADDRESS, VECTOR_KEY};
+        let w = address_from_secret("quai", VECTOR_KEY, Network::Mainnet).unwrap();
+        assert_eq!(w.address, VECTOR_ADDRESS);
+        assert_eq!(w.secret_std, SecretStd::EthHex(format!("0x{VECTOR_KEY}")));
+        let t = address_from_secret("quai:", VECTOR_KEY, Network::Mainnet).unwrap();
+        assert_eq!(t.address, VECTOR_ADDRESS);
+        assert!(is_custom_token("quai:"));
+        assert_eq!(
+            address_from_secret("quai", PRIV1, Network::Mainnet).err(),
+            Some(WalletError::QuaiOutOfScope(
+                "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf".into()
+            ))
+        );
+        // `eth` keeps minting it: the scope is Quai's rule, not Ethereum's.
+        assert!(address_from_secret("eth", PRIV1, Network::Mainnet).is_ok());
+        for _ in 0..4 {
+            let g = generate("quai", Network::Mainnet).unwrap();
+            let bytes: [u8; 20] = hexbytes::decode_n(&g.address[2..]).unwrap();
+            assert!(coins::quai_payout_scope(&bytes), "{}", g.address);
+            assert_eq!(detect_family(&g.address), Some(Family::Ethereum));
+            assert_eq!(
+                address_from_secret("quai", &g.secret_hex, Network::Mainnet)
+                    .unwrap()
+                    .address,
+                g.address
+            );
+        }
+    }
+
+    /// Groestlcoin through the public seam: the `groestlcoinjs-lib` private-key-1 and
+    /// `2bfe58ab…` fixtures in both address forms, the Groestl WIF read back, a Bitcoin WIF
+    /// refused, and a generated key round-tripping through detection.
+    #[test]
+    fn groestlcoin_through_the_public_seam() {
+        for (key, wif, p2pkh, p2wpkh) in families::groestlcoin::tests::MAINNET {
+            let w = address_from_secret("grs", key, Network::Mainnet).unwrap();
+            assert_eq!(w.address, p2wpkh);
+            assert_eq!(w.secret_std, SecretStd::Wif(wif.to_string()));
+            assert_eq!(w.secret_hex, key);
+            let l = address_from_secret_kind("grs", key, Network::Mainnet, true).unwrap();
+            assert_eq!(l.address, p2pkh);
+            assert_eq!(
+                address_from_secret_kind("grs", wif, Network::Mainnet, true)
+                    .unwrap()
+                    .address,
+                p2pkh
+            );
+            assert_eq!(detect_family(p2wpkh), Some(Family::SegwitV0));
+            assert_eq!(detect_family(p2pkh), Some(Family::P2pkh));
+        }
+        // A Bitcoin WIF for key 1 checksums with SHA256d and is not a Groestlcoin secret.
+        assert_eq!(
+            address_from_secret(
+                "grs",
+                "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn",
+                Network::Mainnet
+            )
+            .err(),
+            Some(WalletError::BadPrivKeyHex)
+        );
+        let g = generate("grs", Network::Mainnet).unwrap();
+        assert!(g.address.starts_with("grs1q"), "{}", g.address);
+        let SecretStd::Wif(wif) = &g.secret_std else {
+            panic!("a Groestlcoin wallet prints a WIF")
+        };
+        assert_eq!(
+            address_from_secret("grs", wif, Network::Mainnet)
+                .unwrap()
+                .address,
+            g.address
+        );
     }
 
     /// Xelis through the public seam: vector 1 of `families::xelis` (private key 1, little-endian),

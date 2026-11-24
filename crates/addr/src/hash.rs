@@ -2,9 +2,9 @@
 //! else — `hash160`, the BIP340 tagged hash — is generation-side and stays in the `forager-wallet`
 //! crate.
 //!
-//! Two of the three come from a dependency (`sha2`, `blake2b_simd`). The third, Keccak-256, is
-//! written out here: it is the only hash this crate needs that no allowed dependency provides, and
-//! `tests/hygiene.rs` pins the dependency list to four crates none of which carries a curve, an
+//! Three come from a dependency (`sha2`, `blake2b_simd`, `groestl`). Keccak-256 is written out
+//! here: it is the only hash this crate needs that no allowed dependency provides, and
+//! `tests/hygiene.rs` pins the dependency list to five crates none of which carries a curve, an
 //! entropy source or a wordlist. Adding a Keccak crate to reach two checksums would trade that
 //! guarantee for ~130 lines of permutation, so the permutation is written out instead.
 
@@ -13,6 +13,18 @@ use sha2::{Digest, Sha256};
 pub(crate) fn double_sha256(data: &[u8]) -> [u8; 32] {
     let h1 = Sha256::digest(data);
     Sha256::digest(h1).into()
+}
+
+/// Groestlcoin's base58check hash: Groestl-512 applied twice, `Groestl512(Groestl512(data))`.
+///
+/// Source: `Groestlcoin/groestlcoin@17a57752` `src/groestlcoin.h` (`HashForAddress` is
+/// `HashGroestl`) and `src/groestlcoin-hash.cpp` (`HashGroestl`: two `sph_groestl512` passes, the
+/// first 32 bytes of the second digest kept). The checksum is the first four bytes, so the 64 bytes
+/// returned here agree with the reference on every byte the checksum reads.
+pub(crate) fn double_groestl512(data: &[u8]) -> [u8; 64] {
+    use groestl::Groestl512;
+    let h1 = Groestl512::digest(data);
+    Groestl512::digest(h1).into()
 }
 
 /// BLAKE2b with a 32-byte digest, for the Ergo P2PK address checksum.
@@ -172,7 +184,7 @@ pub fn keccak256(data: &[u8]) -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
-    use super::{blake2b256, double_sha256, keccak256};
+    use super::{blake2b256, double_groestl512, double_sha256, keccak256};
     use crate::hexbytes;
 
     /// The well-known `BLAKE2b-256("")` vector. Its value differs from the first 32 bytes of
@@ -197,6 +209,23 @@ mod tests {
         assert_eq!(
             hexbytes::encode(&double_sha256(b"")),
             "5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456"
+        );
+    }
+
+    /// Groestl-512 of the empty string is the published Groestl KAT (`6d3ad29d…4ad8`), and the
+    /// first 32 bytes of the double hash match `groestlcoin_hash.getHash(b"", 0)`, the C
+    /// implementation Groestlcoin's own Python tooling links (`groestlcoin_hash` 1.0.3).
+    #[test]
+    fn double_groestl512_of_the_empty_string() {
+        use groestl::{Digest, Groestl512};
+        assert_eq!(
+            hexbytes::encode(&Groestl512::digest(b"")),
+            "6d3ad29d279110eef3adbd66de2a0345a77baede1557f5d099fce0c03d6dc2ba\
+             8e6d4a6633dfbd66053c20faa87d1a11f39a7fbe4a6c2f009801370308fc4ad8"
+        );
+        assert_eq!(
+            hexbytes::encode(&double_groestl512(b"")[..32]),
+            "fdfb14d386c6dff85715c50efb826c43e04205b18410497aa47f121eceb3a65e"
         );
     }
 

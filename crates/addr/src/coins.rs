@@ -13,13 +13,18 @@ use std::sync::{Mutex, OnceLock};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Family {
     /// Bitcoin-style P2PKH: `BASE58CHECK(version ‖ HASH160(compressed_or_uncompressed_pubkey))`.
+    /// Detection also answers this family for a Groestlcoin P2PKH address, whose base58check
+    /// checksum is double Groestl-512 instead of double SHA-256 (see [`FamilyParams::Groestlcoin`]).
     P2pkh,
-    /// Bitcoin-style SegWit v0 P2WPKH (bech32) with an optional P2PKH legacy path.
+    /// Bitcoin-style SegWit v0 P2WPKH (bech32) with an optional P2PKH legacy path. Groestlcoin
+    /// ([`FamilyParams::Groestlcoin`]) is in this family too: its bech32 address is Bitcoin's
+    /// construction, and only its legacy path and WIF change the base58check hash.
     SegwitV0,
     /// Bitcoin-style Taproot P2TR (bech32m key-path only, BIP340/341/350).
     Taproot,
     /// Ethereum-family: EIP-55 checksummed `0x`-prefixed 20-byte address derived from the
-    /// uncompressed pubkey via keccak256.
+    /// uncompressed pubkey via keccak256. Quai ([`FamilyParams::Quai`]) is in this family: its
+    /// address is the same string, and only its shard and ledger rules differ.
     Ethereum,
     /// CryptoNote (Monero / XMR): curve25519 + dual spend/view keys.
     CryptoNote,
@@ -75,6 +80,56 @@ pub enum Family {
     /// one-sided address is 91 characters and opens `12`; the default (interactive and one-sided)
     /// form opens `14`.
     Tari,
+    /// Zano (ZANO): CryptoNote block-base58 of `varint(prefix) ‖ spend public ‖ view public [‖
+    /// flags] ‖ Keccak-256[..4]` over ed25519 keys, with prefix [`ZANO_ADDRESS_PREFIX`] (`Zx…`, no
+    /// flags byte) or [`ZANO_AUDITABLE_ADDRESS_PREFIX`] (`aZx…`, flags `0x01`). The layout is
+    /// CryptoNote's, but the keys come from a seed and a 26-word phrase no CryptoNote wallet reads,
+    /// so it is its own family: a Monero address is not a Zano payout.
+    Zano,
+}
+
+/// Zano's normal-address network prefix, `0xc5` (`Zx…`): `CURRENCY_PUBLIC_ADDRESS_BASE58_PREFIX`
+/// in `hyle-team/zano@d49f34aa` `src/currency_core/currency_config.h` L28.
+pub const ZANO_ADDRESS_PREFIX: u64 = 0xc5;
+
+/// Zano's auditable-address network prefix, `0x98c8` (`aZx…`):
+/// `CURRENCY_PUBLIC_AUDITABLE_ADDRESS_BASE58_PREFIX`, the same file L31.
+pub const ZANO_AUDITABLE_ADDRESS_PREFIX: u64 = 0x98c8;
+
+/// Groestlcoin's bech32 HRP on mainnet, `grs`. Source: `Groestlcoin/groestlcoin@17a57752`
+/// `src/kernel/chainparams.cpp` L182 (`bech32_hrp`).
+pub const GROESTLCOIN_HRP: &str = "grs";
+
+/// Groestlcoin's bech32 HRP on testnet, `tgrs`: the same file, L273.
+pub const GROESTLCOIN_HRP_TESTNET: &str = "tgrs";
+
+/// Groestlcoin's mainnet P2PKH version byte, 36 (`F…`): the same file, L176
+/// (`base58Prefixes[PUBKEY_ADDRESS]`).
+pub const GROESTLCOIN_P2PKH_VERSION: u8 = 36;
+
+/// Groestlcoin's testnet P2PKH version byte, 111 (`m…`/`n…`): the same file, L267.
+pub const GROESTLCOIN_P2PKH_VERSION_TESTNET: u8 = 111;
+
+/// Groestlcoin's mainnet WIF byte, 128: the same file, L178 (`base58Prefixes[SECRET_KEY]`).
+pub const GROESTLCOIN_WIF: u8 = 0x80;
+
+/// Groestlcoin's testnet WIF byte, 239: the same file, L269.
+pub const GROESTLCOIN_WIF_TESTNET: u8 = 0xef;
+
+/// The first byte of a Quai address in the Cyprus1 zone: region 0 in the high nibble, zone 0 in the
+/// low one. Source: `dominant-strategies/go-quai@6561a9f8` `common/address.go`
+/// (`AddressBytes.Location`), and quais.js `src/constants/zones.ts` (`Zone.Cyprus1 = '0x00'`).
+pub const QUAI_ZONE_CYPRUS1: u8 = 0x00;
+
+/// The second byte of a Quai-ledger address is at most this value; above it the address is in the
+/// Qi (UTXO) ledger. Source: the same `common/address.go`, `IsInQuaiLedgerScope` (`a[1] <= 127`).
+pub const QUAI_LEDGER_MAX_SECOND_BYTE: u8 = 0x7f;
+
+/// Whether a 20-byte Quai address can take a mining payout from this tool: Cyprus1 zone and the
+/// Quai ledger. Any other address is a valid Quai address in another shard or ledger, which a
+/// Cyprus1 pool cannot pay.
+pub fn quai_payout_scope(addr: &[u8; 20]) -> bool {
+    addr[0] == QUAI_ZONE_CYPRUS1 && addr[1] <= QUAI_LEDGER_MAX_SECOND_BYTE
 }
 
 /// Human-readable part of a mainnet Xelis address. Source: `xelis-project/xelis-blockchain@db59b5c2`
@@ -143,10 +198,10 @@ pub enum FamilyParams {
     ///     `version` field is a slice and could hold two bytes, but [`parse_token`]'s `ver=` reads
     ///     a single byte, so no token can even name it.
     ///
-    /// Neither is in [`COINS`], and neither can be added by a table row: each needs a hash
-    /// primitive this workspace does not implement, and the table's own rule is that no row lands
-    /// without a passing KAT.  The defence for the runtime escape hatch is therefore the
-    /// [`TokenSyntax::caveat`] on the `p2pkh` grammar row, which the CLI prints.
+    /// Neither can be expressed by a `P2pkh` row. Groestlcoin has its own variant,
+    /// [`FamilyParams::Groestlcoin`], and its own `grs` row; Decred is not supported. The defence
+    /// for the runtime escape hatch is the [`TokenSyntax::caveat`] on the `p2pkh` grammar row,
+    /// which the CLI prints and which points a Groestlcoin user at `grs`.
     P2pkh {
         /// Version prefix for mainnet addresses (e.g. `[0x00]` for BTC, `[0x1E]` for DOGE,
         /// `[0x1C, 0xB8]` for a Zcash-family t-address).
@@ -233,6 +288,24 @@ pub enum FamilyParams {
     /// Tari has no per-coin parameters: the network byte is the protocol constant
     /// [`TARI_NETWORK_MAINNET`].
     Tari,
+    /// Groestlcoin: SegWit v0 P2WPKH (bech32, HRP [`GROESTLCOIN_HRP`]) by default, with a P2PKH
+    /// legacy path, exactly as [`FamilyParams::SegwitV0`] except for one primitive. Groestlcoin
+    /// replaced the base58check checksum, so its P2PKH address and its WIF end in
+    /// `Groestl512(Groestl512(payload))[..4]` rather than Bitcoin's double SHA-256
+    /// ([`crate::codec::base58::encode_check_groestl`]). HASH160 and bech32 are Bitcoin's. A
+    /// separate variant because the hash cannot be a parameter of the `SegwitV0` rows: every one of
+    /// them, and every `segwit:` token, assumes SHA256d. The bytes are the protocol constants
+    /// `GROESTLCOIN_*` above. Its [`Family`] is [`Family::SegwitV0`].
+    Groestlcoin,
+    /// Quai: Ethereum's key and address construction (EIP-55 over `Keccak256(pubkey)[12..]`), and
+    /// only an address in the Cyprus1 zone and the Quai ledger is minted ([`quai_payout_scope`]).
+    /// About one key in 512 qualifies, so generation grinds, and a key outside that scope is
+    /// refused rather than printed. A separate variant because an `Ethereum` row accepts every key.
+    /// Its [`Family`] is [`Family::Ethereum`]: the string is indistinguishable from one.
+    Quai,
+    /// Zano has no per-coin parameters: its prefixes are the protocol constants
+    /// [`ZANO_ADDRESS_PREFIX`] and [`ZANO_AUDITABLE_ADDRESS_PREFIX`], and only mainnet is modelled.
+    Zano,
 }
 
 impl FamilyParams {
@@ -241,9 +314,10 @@ impl FamilyParams {
     pub fn family(&self) -> Family {
         match self {
             FamilyParams::P2pkh { .. } => Family::P2pkh,
-            FamilyParams::SegwitV0 { .. } => Family::SegwitV0,
+            // Groestlcoin is SegWit v0 with its own base58check hash; see its variant.
+            FamilyParams::SegwitV0 { .. } | FamilyParams::Groestlcoin => Family::SegwitV0,
             FamilyParams::Taproot { .. } => Family::Taproot,
-            FamilyParams::Ethereum => Family::Ethereum,
+            FamilyParams::Ethereum | FamilyParams::Quai => Family::Ethereum,
             FamilyParams::CryptoNote { .. } => Family::CryptoNote,
             FamilyParams::KaspaAddr { .. } => Family::KaspaAddr,
             FamilyParams::Ergo => Family::Ergo,
@@ -257,6 +331,7 @@ impl FamilyParams {
             FamilyParams::Nock => Family::Nock,
             FamilyParams::Xelis => Family::Xelis,
             FamilyParams::Tari => Family::Tari,
+            FamilyParams::Zano => Family::Zano,
         }
     }
 
@@ -474,6 +549,20 @@ pub static COINS: &[CoinSpec] = &[
             p2pkh_version: &[0x30],
             p2pkh_version_testnet: None,
         },
+    },
+    // ---- Groestlcoin (SegWit v0, Groestl-512 base58check) ----
+    // GRS: PUBKEY_ADDRESS=36 (`F…`), SECRET_KEY=128, bech32_hrp="grs"; testnet 111/239/"tgrs".
+    //      Source: Groestlcoin/groestlcoin@17a57752c63bef11f316d57477f981ca6af79740
+    //      src/kernel/chainparams.cpp L176-L182 (mainnet), L267-L273 (testnet); the base58check
+    //      checksum is double Groestl-512 (src/base58.cpp L148/L162 → src/groestlcoin.h
+    //      `HashForAddress` → src/groestlcoin-hash.cpp `HashGroestl`). SLIP-44 17 "GRS Groestlcoin",
+    //      and Groestlcoin Core's own descriptor wallet derives at m/84h/17h (src/wallet/
+    //      walletutil.cpp L56, L75). bech32 `grs1q…` by default, `--legacy` renders `F…`.
+    CoinSpec {
+        ticker: "grs",
+        name: "Groestlcoin",
+        hd_slip44: Some(17),
+        params: FamilyParams::Groestlcoin,
     },
     // ---- P2PKH family ----
     // DOGE: chainparams PUBKEY_ADDRESS=30(0x1e), SECRET_KEY=158(0x9e)
@@ -998,6 +1087,20 @@ pub static COINS: &[CoinSpec] = &[
         hd_slip44: None,
         params: FamilyParams::Ethereum,
     },
+    // Quai (QUAI, KawPoW/SHA/Scrypt merged mining): Ethereum's address, `Keccak256(pubkey[1:])[12:]`
+    // with EIP-55 case, scoped by its first two bytes. Byte 0 is the location (Cyprus1 = 0x00) and
+    // bit 7 of byte 1 selects the ledger (clear = Quai, set = Qi). Source:
+    // dominant-strategies/go-quai@6561a9f89a027fb5b76fbe75ecf48ffe93c8370d common/address.go
+    // (`AddressBytes.Location`, `IsInQuaiLedgerScope`); quais.js@87e02f08 src/wallet/bip44/bip44.ts
+    // (`deriveNextAddressNode`), src/wallet/utils.ts (`isValidAddressForZone`) and
+    // src/wallet/quai-hdwallet.ts (`_coinType = 994`, parent path m/44'/994'). SLIP-44 994 "QUAI
+    // Quai Network" (969 is Qi).
+    CoinSpec {
+        ticker: "quai",
+        name: "Quai",
+        hd_slip44: Some(994),
+        params: FamilyParams::Quai,
+    },
     // ---- XDAG family ----
     // XDAG: modern account address = Base58Check(HASH160(compressed_pubkey)), no version byte.
     // Source: XDagger/xdagj (MIT) crypto/keys/AddressUtils.toBytesAddress +
@@ -1092,6 +1195,20 @@ pub static COINS: &[CoinSpec] = &[
         name: "Tari",
         hd_slip44: None,
         params: FamilyParams::Tari,
+    },
+    // ---- Zano family ----
+    // Zano (ZANO, ProgPowZ): spend secret = (seed ‖ Keccak256(seed)) mod l, view secret =
+    // Keccak256(spend) mod l, address = block-base58(varint(0xc5) ‖ spend_pub ‖ view_pub ‖
+    // Keccak256[..4]), secret = the 26-word seed phrase. Source:
+    // hyle-team/zano@d49f34aa8d7978586990aa83922df0f567a8ae3b src/crypto/crypto.cpp,
+    // src/currency_core/{account.cpp, currency_format_utils.cpp, currency_config.h},
+    // src/common/mnemonic-encoding.cpp. SLIP-44 1018 is registered to Zano, but Zano wallets derive
+    // no BIP44 path, so `hd_slip44: None`.
+    CoinSpec {
+        ticker: "zano",
+        name: "Zano",
+        hd_slip44: None,
+        params: FamilyParams::Zano,
     },
     // SCASH ("Satoshi Cash", RandomX): address bytes left BYTE-IDENTICAL to Bitcoin — P2PKH
     // 0x00, WIF 0x80, bech32 HRP "bc"; testnet 0x6f/"tb". So a SCASH address is indistinguishable
@@ -1310,9 +1427,9 @@ pub static TOKEN_GRAMMAR: &[TokenSyntax] = &[
         caveat: Some(
             "This token sets bytes, not hashes: it always uses Bitcoin's HASH160 pubkey hash\n\
              and Bitcoin's SHA256d base58check checksum. That is right for Bitcoin-derived\n\
-             chains and WRONG for Groestlcoin (double-Groestl-512 checksum) and Decred\n\
-             (BLAKE-256, two-byte version) — for those, both the address and the WIF are\n\
-             wrong, and no `ver=` can fix it.",
+             chains and WRONG for Groestlcoin (double-Groestl-512 checksum; use `--coin grs`)\n\
+             and Decred (BLAKE-256, two-byte version) — for those, both the address and the\n\
+             WIF are wrong, and no `ver=` can fix it.",
         ),
     },
     TokenSyntax {
@@ -1327,7 +1444,8 @@ pub static TOKEN_GRAMMAR: &[TokenSyntax] = &[
         // independently, and a user reading the `segwit:` line may never see the `p2pkh:` one.
         caveat: Some(
             "The `--legacy` address form and the WIF are base58check with Bitcoin's SHA256d\n\
-             checksum, so they are wrong for a chain that changed it (e.g. Groestlcoin).",
+             checksum, so they are wrong for a chain that changed it (Groestlcoin: use\n\
+             `--coin grs`).",
         ),
     },
     TokenSyntax {
@@ -1457,6 +1575,30 @@ pub static TOKEN_GRAMMAR: &[TokenSyntax] = &[
         flags: &[],
         syntax: "tari:",
         example: "tari:",
+        caveat: None,
+    },
+    TokenSyntax {
+        family: "zano",
+        keys: &[],
+        flags: &[],
+        syntax: "zano:",
+        example: "zano:",
+        caveat: None,
+    },
+    TokenSyntax {
+        family: "quai",
+        keys: &[],
+        flags: &[],
+        syntax: "quai:",
+        example: "quai:",
+        caveat: None,
+    },
+    TokenSyntax {
+        family: "groestlcoin",
+        keys: &[],
+        flags: &[],
+        syntax: "groestlcoin:",
+        example: "groestlcoin:",
         caveat: None,
     },
 ];
@@ -1589,6 +1731,9 @@ pub fn parse_token(token: &str) -> Result<CoinSpec, String> {
         "nock" => FamilyParams::Nock,
         "xelis" => FamilyParams::Xelis,
         "tari" => FamilyParams::Tari,
+        "groestlcoin" => FamilyParams::Groestlcoin,
+        "quai" => FamilyParams::Quai,
+        "zano" => FamilyParams::Zano,
         // Unreachable while `TOKEN_GRAMMAR` and this match list the same families — the lookup above
         // already rejected any name the grammar does not carry.  Report it instead of panicking, so a
         // grammar row added without an arm here degrades to a clear message; the
@@ -1968,9 +2113,10 @@ mod tests {
         for spec in COINS {
             let expected = match spec.params {
                 FamilyParams::P2pkh { .. } => Family::P2pkh,
-                FamilyParams::SegwitV0 { .. } => Family::SegwitV0,
+                // Groestlcoin is SegWit v0 with its own base58check hash; see its variant.
+                FamilyParams::SegwitV0 { .. } | FamilyParams::Groestlcoin => Family::SegwitV0,
                 FamilyParams::Taproot { .. } => Family::Taproot,
-                FamilyParams::Ethereum => Family::Ethereum,
+                FamilyParams::Ethereum | FamilyParams::Quai => Family::Ethereum,
                 FamilyParams::CryptoNote { .. } => Family::CryptoNote,
                 FamilyParams::KaspaAddr { .. } => Family::KaspaAddr,
                 FamilyParams::Ergo => Family::Ergo,
@@ -1984,6 +2130,7 @@ mod tests {
                 FamilyParams::Nock => Family::Nock,
                 FamilyParams::Xelis => Family::Xelis,
                 FamilyParams::Tari => Family::Tari,
+                FamilyParams::Zano => Family::Zano,
             };
             assert_eq!(spec.family(), expected, "{}", spec.ticker);
         }

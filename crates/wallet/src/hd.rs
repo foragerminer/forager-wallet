@@ -116,9 +116,11 @@ impl core::fmt::Display for Purpose {
 /// user the same kind of address, or one of the two is quietly worse than the other.
 pub fn native_purpose(coin: &CoinSpec) -> Option<Purpose> {
     match coin.params {
-        FamilyParams::SegwitV0 { .. } => Some(Purpose::Bip84),
+        FamilyParams::SegwitV0 { .. } | FamilyParams::Groestlcoin => Some(Purpose::Bip84),
         FamilyParams::Taproot { .. } => Some(Purpose::Bip86),
-        FamilyParams::P2pkh { .. } | FamilyParams::Ethereum => Some(Purpose::Bip44),
+        FamilyParams::P2pkh { .. } | FamilyParams::Ethereum | FamilyParams::Quai => {
+            Some(Purpose::Bip44)
+        }
         _ => None,
     }
 }
@@ -133,9 +135,16 @@ pub fn supports(coin: &CoinSpec, purpose: Purpose) -> bool {
     }
     match purpose {
         Purpose::Bip44 => {
-            matches!(coin.params, FamilyParams::Ethereum) || coin.params.p2pkh_parts().is_some()
+            matches!(
+                coin.params,
+                FamilyParams::Ethereum | FamilyParams::Groestlcoin | FamilyParams::Quai
+            ) || coin.params.p2pkh_parts().is_some()
         }
-        Purpose::Bip84 => matches!(coin.params, FamilyParams::SegwitV0 { .. }),
+        // Groestlcoin has BIP44 and BIP84 forms only: its Taproot path is not offered.
+        Purpose::Bip84 => matches!(
+            coin.params,
+            FamilyParams::SegwitV0 { .. } | FamilyParams::Groestlcoin
+        ),
         Purpose::Bip86 => matches!(
             coin.params,
             FamilyParams::SegwitV0 { .. } | FamilyParams::Taproot { .. }
@@ -203,7 +212,8 @@ impl HdAccount {
             | SecretStd::EthHex(s)
             | SecretStd::RawHex(s)
             | SecretStd::Mnemonic(s)
-            | SecretStd::TariSeed(s) => s,
+            | SecretStd::TariSeed(s)
+            | SecretStd::ZanoSeed(s) => s,
             // HD derivation never produces a CryptoNote seed: that family has no BIP32 path.
             SecretStd::MoneroMnemonic { view_key_hex, .. } => view_key_hex,
         }
@@ -343,6 +353,9 @@ pub fn derive(
     // `bip39::seed` validates the phrase first, so a typo surfaces as a specific error instead of
     // as a well-formed seed for a wallet the user does not own. Its `Seed` zeroizes on drop.
     let seed = bip39::seed(phrase, passphrase).map_err(HdError::InvalidMnemonic)?;
+    if matches!(coin.params, FamilyParams::Quai) {
+        return derive_quai(&seed, coin, account, index);
+    }
     let path_str = format!("m/{}'/{slip44}'/{account}'/0/{index}", purpose.number());
     let path: DerivationPath = path_str.parse().map_err(|_| HdError::Derivation)?;
     // The seam into `bip32`: BIP39 is this crate's own; CKDpriv is `bip32`'s. `bip32` 0.6 takes the
@@ -362,6 +375,15 @@ pub fn derive(
         (Purpose::Bip44, FamilyParams::Ethereum) => (
             families::ethereum::address(&d),
             SecretStd::EthHex(secret::eth_hex(&priv32)),
+        ),
+        // Groestlcoin's legacy address and WIF use its double-Groestl-512 base58check.
+        (Purpose::Bip44, FamilyParams::Groestlcoin) => (
+            families::groestlcoin::address_p2pkh(&secp256k1::pubkey_compressed(&d), false),
+            SecretStd::Wif(families::groestlcoin::wif(&priv32, false)),
+        ),
+        (Purpose::Bip84, FamilyParams::Groestlcoin) => (
+            families::groestlcoin::address(&d, false, false),
+            SecretStd::Wif(families::groestlcoin::wif(&priv32, false)),
         ),
         (Purpose::Bip44, params) => {
             // `supports` already proved this is `Some`.
@@ -410,6 +432,49 @@ pub fn derive(
     })
 }
 
+/// Quai's HD derivation: the first index at or after `start` under `m/44'/994'/<account>'/0` whose
+/// address is in Cyprus1 and the Quai ledger, as quais.js's `deriveNextAddressNode` steps it
+/// (`QuaiHDWallet.getNextAddress(account, Zone.Cyprus1)`, `src/wallet/bip44/bip44.ts@87e02f08`).
+/// The printed path carries the index actually used, which a Quai wallet needs to find the address.
+/// Indices stay non-hardened, so the search ends at `2^31 - 1`.
+fn derive_quai(
+    seed: &bip39::Seed,
+    coin: &CoinSpec,
+    account: u32,
+    start: u32,
+) -> Result<HdAccount, HdError> {
+    let slip44 = coin
+        .hd_slip44
+        .ok_or_else(|| HdError::UnknownCoin(coin.ticker.to_string()))?;
+    let parent: DerivationPath = format!("m/44'/{slip44}'/{account}'/0")
+        .parse()
+        .map_err(|_| HdError::Derivation)?;
+    let change =
+        XPrv::derive_from_path(seed.as_bytes(), &parent).map_err(|_| HdError::Derivation)?;
+    for index in start..0x8000_0000 {
+        let child = bip32::ChildNumber::new(index, false).map_err(|_| HdError::Derivation)?;
+        let xprv = change
+            .derive_child(child)
+            .map_err(|_| HdError::Derivation)?;
+        let mut priv32: [u8; 32] = PrivateKey::to_bytes(xprv.private_key());
+        let d = secp256k1::scalar_in_range(&priv32).map_err(|_| HdError::Derivation)?;
+        if let Ok(address) = families::quai::address(&d) {
+            let secret = SecretStd::EthHex(secret::eth_hex(&priv32));
+            priv32.zeroize();
+            return Ok(HdAccount {
+                symbol: coin.ticker,
+                name: coin.name,
+                purpose: Purpose::Bip44,
+                path: format!("m/44'/{slip44}'/{account}'/0/{index}"),
+                address,
+                secret,
+            });
+        }
+        priv32.zeroize();
+    }
+    Err(HdError::Derivation)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -436,9 +501,9 @@ mod tests {
         assert_eq!(
             tickers,
             [
-                "btc", "ltc", "vtc", "kcn", "rin", "doge", "rvn", "firo", "mewc", "xvg", "zny",
-                "ytn", "avn", "lcc", "ftc", "btx", "dnr", "scc", "grlc", "etc", "eth", "ubq",
-                "zec", "btg", "kmd", "btcz", "zer", "yec", "zcl", "ltz"
+                "btc", "ltc", "vtc", "kcn", "rin", "grs", "doge", "rvn", "firo", "mewc", "xvg",
+                "zny", "ytn", "avn", "lcc", "ftc", "btx", "dnr", "scc", "grlc", "etc", "eth",
+                "ubq", "quai", "zec", "btg", "kmd", "btcz", "zer", "yec", "zcl", "ltz"
             ]
         );
         for c in supported() {

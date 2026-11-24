@@ -10,7 +10,8 @@ use crate::{codec::base58, curves::secp256k1, hash};
 /// [`base58::encode_check`]. `coins::FamilyParams::P2pkh` carries version bytes only, so a caller
 /// choosing this encoder is also choosing that pair — right for every coin in the table and for
 /// every Bitcoin-derived fork, wrong for Groestlcoin and Decred, which are cited and warned about
-/// in `coins::FamilyParams::P2pkh` and in the `p2pkh:` coin token's caveat.
+/// in `coins::FamilyParams::P2pkh` and in the `p2pkh:` coin token's caveat. Groestlcoin has its
+/// own encoder, `families::groestlcoin`.
 pub(crate) fn address(d: &secp256k1::Secret, version: &[u8], compressed: bool) -> String {
     let pk = if compressed {
         secp256k1::pubkey_compressed(d).to_vec()
@@ -40,7 +41,8 @@ mod tests {
     ///
     /// No coin row selects either hash, so this is the only place the pair is asserted. A chain
     /// that changes one (Groestlcoin's Groestl-512 checksum, Decred's BLAKE-256) cannot be minted
-    /// here, and the `p2pkh:` coin token's caveat tells the user so; whoever changes a primitive
+    /// here (Groestlcoin has its own encoder, `families::groestlcoin`), and the `p2pkh:` coin
+    /// token's caveat tells the user so; whoever changes a primitive
     /// must fail this test first and update that text with it.
     #[test]
     fn a_p2pkh_address_is_hash160_under_a_double_sha256_base58check() {
