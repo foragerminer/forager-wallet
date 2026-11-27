@@ -28,6 +28,7 @@ Run `forager-wallet list` for the live table — this file documents it, and a t
 | Quantus | SS58 (prefix 189) of Poseidon2(ML-DSA-87 public key) | ML-DSA-87 (FIPS 204) |
 | Nockchain | base58 of the Tip5 digest of the master public key (v1 payee hash), no version byte, **no checksum** | Cheetah over Fp^6 (Goldilocks) |
 | Xelis | bech32 (classic checksum, not bech32m) with a `:` separator: `xel:` + (compressed `s^-1 * H` ‖ type `0x00`) | Ristretto255 |
+| Neural Engine Byte | bech32m("neb", BLAKE3(Ed25519 public key)), no witness version; key is a 32-byte RFC 8032 seed | ed25519 |
 | Tari | base58(network) ‖ base58(features) ‖ base58(view key ‖ spend key ‖ DammSum), keys from a 24-word CipherSeed | Ristretto255 |
 | Zano | CryptoNote block-base58 of varint(0xc5) ‖ spend key ‖ view key ‖ Keccak-256[..4]; keys from a 32-byte seed and a 26-word phrase | ed25519 |
 
@@ -119,6 +120,7 @@ may carry exactly one of two markers, and a marker is the only way a row can cla
 | `quan` | Quantus | Quantus | `qz…` | — |
 | `nock` | Nockchain | Nockchain | no fixed prefix | — |
 | `xel` | Xelis | Xelis | `xel:…` | — |
+| `neb` | Neural Engine Byte | Neural Engine Byte | `neb1…` | — |
 | `xtm` | Tari | Tari | `12…` | — |
 | `zano` | Zano | Zano | `Zx…` | — |
 
@@ -201,6 +203,18 @@ These rows need a word of explanation:
   `bech32.rs`, `elgamal/key.rs`, `proofs/mod.rs` and `xelis_common/src/config.rs`. The known-answer
   vectors (four keys, both networks) were produced by running that code. **Not checked:** a restore
   in the official wallet and a pool payout.
+- **`neb`** — Neural Engine Byte. The secret is a 32-byte Ed25519 seed (RFC 8032), shown as 64
+  lowercase hex characters. Any 32 bytes are a valid seed, the all-zero one included, so `restore`
+  applies no range check and reads the hex form only (no WIF), ignoring whitespace. The public key
+  is the standard RFC 8032 one. The lock is `BLAKE3(public key)`, and the address is the lock as
+  bech32m (BIP350 constant) under the HRP `neb`, with no witness-version byte, so it is not a SegWit
+  address. It is always 62 characters, `neb1` plus 58 key-dependent characters, and is the same on
+  every network: `--testnet` mints the same address. The official wallet restores the printed seed:
+  `neb-wallet --wallet wallet.txt import <64-hex>`, then `neb-wallet --wallet wallet.txt address`.
+  `new --hd` does not apply. Source: `SilasEigen/neb@v1.0.9` (Apache-2.0), `spec/node.md` section
+  5.2 and `node/crates/neb-wallet/src/{wallet,address}.rs`. The five known-answer vectors were
+  captured by running the official `neb-wallet` v1.0.9 built from source; two of them are RFC 8032
+  section 7.1 tests 1 and 2, which pins the Ed25519 step on its own. **Not checked:** a pool payout.
 - **`xtm`** — Tari. The secret is a 24-word Tari **CipherSeed**, which is not BIP39 although it
   uses the same 2048 English words: the words carry 33 enciphered bytes (version 2, a birthday,
   16 bytes of entropy, a MAC, a salt and a CRC-32), sealed with Argon2d and ChaCha20 under Tari's
@@ -440,6 +454,7 @@ token's `--legacy` form and its WIF inherit the same assumption.
 --coin quantus:
 --coin nock:
 --coin xelis:
+--coin neb:
 --coin tari:
 --coin groestlcoin:
 --coin quai:

@@ -371,6 +371,9 @@ fn leading_characters(spec: &coins::CoinSpec) -> Leading {
         // account id (every sample in the KAT, and the published addresses, open `qz`).
         coins::FamilyParams::Quantus => Leading::Forced("qz".to_string()),
         coins::FamilyParams::Noid => Leading::Forced(format!("{}1", coins::NOID_HRP)),
+        // `bech32m("neb", lock)`, no witness version: the HRP and separator, then the lock's 5-bit
+        // groups, which are hash-dependent. `neb1` is all that is forced.
+        coins::FamilyParams::Neb => Leading::Forced(format!("{}1", coins::NEB_HRP)),
         // `bech32(hrp, ':', key ‖ 0x00)`: the HRP and the `:` separator, then the 5-bit groups of a
         // compressed Ristretto255 key. Its first byte's top five bits are key-dependent (only the
         // lowest bit of byte 0 and the top bit of byte 31 are fixed by the encoding), so `xel:` is

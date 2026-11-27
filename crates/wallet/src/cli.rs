@@ -269,6 +269,14 @@ fn cmd_new(coin: &str, net: Network, legacy: bool, testnet: bool) -> Result<(), 
         println!("The address above is the wallet's address 0, the one it shows first.");
     }
 
+    if crate::resolve_spec(coin).map(|s| s.family()) == Ok(Family::Neb) {
+        println!();
+        println!("The raw key is the 32-byte Ed25519 seed of a Neural Engine Byte wallet. The");
+        println!("official wallet restores it: `neb-wallet --wallet wallet.txt import <hex>`,");
+        println!("then `neb-wallet --wallet wallet.txt address` prints the address above.");
+        println!("Before mining, confirm that it matches.");
+    }
+
     if crate::resolve_spec(coin).map(|s| s.family()) == Ok(Family::Nock) {
         println!();
         println!(
@@ -556,6 +564,7 @@ fn family_label(family: Family) -> &'static str {
         Family::Quantus => "Quantus (SS58 189, Poseidon2 of ML-DSA-87 key)",
         Family::Nock => "Nockchain (base58 v1 payee hash, Tip5; no checksum)",
         Family::Xelis => "Xelis (bech32 xel:, Ristretto255)",
+        Family::Neb => "Neural Engine Byte (bech32m neb1, BLAKE3 of Ed25519 key)",
         Family::Tari => "Tari (base58 dual address, CipherSeed)",
         Family::Zano => "Zano (Zx, 26-word seed phrase)",
     }
@@ -613,6 +622,14 @@ mod tests {
         let master = "d008285e7bbc3fc1374e12978cbb5a434a5e9e8129e26b883761f6ec6f2b385a";
         assert!(run(&argv(&["restore", master, "--coin", "noid"])).is_ok());
         assert!(run(&argv(&["restore", "not-hex", "--coin", "noid"])).is_err());
+    }
+
+    #[test]
+    fn new_and_restore_neb() {
+        assert!(run(&argv(&["new", "--coin", "neb"])).is_ok());
+        let seed = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60";
+        assert!(run(&argv(&["restore", seed, "--coin", "neb"])).is_ok());
+        assert!(run(&argv(&["restore", "not-hex", "--coin", "neb"])).is_err());
     }
 
     #[test]

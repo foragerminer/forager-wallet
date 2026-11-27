@@ -66,6 +66,11 @@ curve25519-dalek = { version = "4.1.3", default-features = false, features = ["z
 argon2 = { version = "0.6", default-features = false, features = ["alloc"] }
 chacha20 = { version = "0.10", default-features = false, features = ["cipher"] }
 crc32fast = { version = "1.5", default-features = false }
+# BLAKE3, the lock hash of a Neural Engine Byte address (`BLAKE3(public key)`). The reference
+# implementation's own crate (CC0-1.0 OR Apache-2.0). `default-features = false` drops `std`, rayon
+# and mmap; `pure` selects the portable Rust path, so no C or assembly is built and the Zig
+# cross-compile stays C-free. Pure computation: no I/O, no network.
+blake3 = { version = "1.8.8", default-features = false, features = ["pure"] }
 
 # `bip32` is also a dev-dependency so the HD KATs can drive BIP32 CKDpriv directly against the
 # published BIP32 test vectors (an official-vector anchor for the non-circular per-coin address KATs).

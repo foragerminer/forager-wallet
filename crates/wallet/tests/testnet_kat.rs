@@ -235,6 +235,7 @@ fn declares_testnet(params: &coins::FamilyParams) -> bool {
         | coins::FamilyParams::Warthog
         | coins::FamilyParams::Epic
         | coins::FamilyParams::Noid
+        | coins::FamilyParams::Neb
         | coins::FamilyParams::Quantus
         | coins::FamilyParams::Nock
         // Tari: only the mainnet network byte is modelled.

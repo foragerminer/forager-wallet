@@ -74,6 +74,9 @@ pub enum Family {
     /// the Pedersen blinding generator. Type `0x00` is a normal address (63 characters, `xel:` on
     /// mainnet, `xet:` on testnet); type `0x01` carries extra data after it.
     Xelis,
+    /// Neural Engine Byte (NEB): `bech32m("neb", BLAKE3(ed25519 public key))`, with a 32-byte
+    /// payload and **no** witness version. 62 characters, `neb1…`, network-agnostic.
+    Neb,
     /// Tari (XTM): the dual address `network ‖ features ‖ view key ‖ spend key ‖ [payment id] ‖
     /// DammSum`, both keys compressed Ristretto255 points, written as three separately base58-encoded
     /// parts (the network byte, the features byte, the rest). See [`crate::codec::tari`]. A mainnet
@@ -167,6 +170,13 @@ pub const EPICBOX_DEFAULT_DOMAIN: &str = "epicbox.epiccash.com";
 
 /// Payload bytes in a Parano1d (NOID) address: one Poseidon2b digest, two GF(2^128) lanes.
 pub const NOID_ADDRESS_LEN: usize = 32;
+
+/// Human-readable part of a Neural Engine Byte (NEB) address. There is one, on every network:
+/// `SilasEigen/neb@v1.0.9` `node/crates/neb-wallet/src/address.rs`.
+pub const NEB_HRP: &str = "neb";
+
+/// Payload bytes in a NEB address: the lock, `BLAKE3(public key)`.
+pub const NEB_ADDRESS_LEN: usize = 32;
 
 /// Per-coin parameters that parameterise the address-derivation algorithm.
 ///
@@ -285,6 +295,9 @@ pub enum FamilyParams {
     /// Xelis has no per-coin parameters: the HRPs are the protocol constants [`XELIS_HRP`] and
     /// [`XELIS_HRP_TESTNET`].
     Xelis,
+    /// NEB has no per-coin parameters: the HRP is the protocol constant [`NEB_HRP`] on every
+    /// network.
+    Neb,
     /// Tari has no per-coin parameters: the network byte is the protocol constant
     /// [`TARI_NETWORK_MAINNET`].
     Tari,
@@ -330,6 +343,7 @@ impl FamilyParams {
             FamilyParams::Quantus => Family::Quantus,
             FamilyParams::Nock => Family::Nock,
             FamilyParams::Xelis => Family::Xelis,
+            FamilyParams::Neb => Family::Neb,
             FamilyParams::Tari => Family::Tari,
             FamilyParams::Zano => Family::Zano,
         }
@@ -1183,6 +1197,17 @@ pub static COINS: &[CoinSpec] = &[
         hd_slip44: None,
         params: FamilyParams::Xelis,
     },
+    // ---- Neural Engine Byte family ----
+    // Neural Engine Byte (NEB): address = bech32m("neb", BLAKE3(ed25519 public key)), a 32-byte
+    // payload with no witness version. The secret is a 32-byte RFC 8032 Ed25519 seed. Source:
+    // SilasEigen/neb v1.0.9 (Apache-2.0) spec/node.md section 5.2 and
+    // node/crates/neb-wallet/src/{wallet.rs, address.rs}.
+    CoinSpec {
+        ticker: "neb",
+        name: "Neural Engine Byte",
+        hd_slip44: None,
+        params: FamilyParams::Neb,
+    },
     // ---- Tari family ----
     // Tari (XTM): dual address `0x00 ‖ features ‖ view_pk ‖ spend_pk ‖ DammSum`, base58 in three
     // parts. The keys come from a 24-word CipherSeed: Argon2d/ChaCha20 around 16 bytes of entropy,
@@ -1570,6 +1595,14 @@ pub static TOKEN_GRAMMAR: &[TokenSyntax] = &[
         caveat: None,
     },
     TokenSyntax {
+        family: "neb",
+        keys: &[],
+        flags: &[],
+        syntax: "neb:",
+        example: "neb:",
+        caveat: None,
+    },
+    TokenSyntax {
         family: "tari",
         keys: &[],
         flags: &[],
@@ -1730,6 +1763,7 @@ pub fn parse_token(token: &str) -> Result<CoinSpec, String> {
         "quantus" => FamilyParams::Quantus,
         "nock" => FamilyParams::Nock,
         "xelis" => FamilyParams::Xelis,
+        "neb" => FamilyParams::Neb,
         "tari" => FamilyParams::Tari,
         "groestlcoin" => FamilyParams::Groestlcoin,
         "quai" => FamilyParams::Quai,
@@ -2129,6 +2163,7 @@ mod tests {
                 FamilyParams::Quantus => Family::Quantus,
                 FamilyParams::Nock => Family::Nock,
                 FamilyParams::Xelis => Family::Xelis,
+                FamilyParams::Neb => Family::Neb,
                 FamilyParams::Tari => Family::Tari,
                 FamilyParams::Zano => Family::Zano,
             };

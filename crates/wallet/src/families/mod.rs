@@ -5,6 +5,7 @@ pub(crate) mod epic;
 pub(crate) mod ergo;
 pub(crate) mod ethereum;
 pub(crate) mod groestlcoin;
+pub(crate) mod neb;
 pub(crate) mod nock;
 pub(crate) mod noid;
 pub mod p2pkh;

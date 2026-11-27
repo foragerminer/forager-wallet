@@ -1,6 +1,6 @@
 # Forager Wallet
 
-**Offline payout-address and key generation for 67 cryptocurrencies.** No pool, no GPU, no network.
+**Offline payout-address and key generation for 68 cryptocurrencies.** No pool, no GPU, no network.
 
 ```sh
 cargo install forager-wallet
@@ -24,7 +24,7 @@ known-answer test. The exceptions are Parano1d (`noid`) and Nockchain (`nock`), 
 standard to re-derive from: their constants are copied from the projects' reference code (see
 [`NOTICE`](NOTICE)). Parano1d's known-answer vectors were captured from that node's own key
 store; Nockchain's are the reference's own Hoon test vectors plus mnemonic-to-address vectors
-captured from the official `nockchain-wallet`. Xelis (`xel`), Tari (`xtm`) and Zano (`zano`) also
+captured from the official `nockchain-wallet`. Xelis (`xel`), Neural Engine Byte (`neb`), Tari (`xtm`) and Zano (`zano`) also
 follow their reference code rather than a standard; their vectors were produced by running that code. That proves the *scheme*. It does not prove *your* address. Only an independent re-derivation does
 that.
 
@@ -34,6 +34,7 @@ that.
    `noid` master secret, the official `nockchain-wallet` (`import-keys --seedphrase --version 1`) for
    a `nock` mnemonic. A Nockchain address has no checksum, so a mistyped one is still valid. For
    `xel`, the official Xelis wallet's `recover_private_key` command, from the 64-hex key. For
+   `neb`, the official `neb-wallet` (`--wallet wallet.txt import <64-hex>`, then `address`). For
    `xtm`, a Tari wallet's restore from the 24 seed words; it may show the `14…` form of the
    address, which has the same keys as the `12…` one printed here. For `zano`, the official Zano
    wallet's restore from the 26-word seed phrase.
@@ -48,7 +49,7 @@ Run `cargo test` to check the known-answer vectors yourself.
 ## Offline by construction
 
 The dependency list is `k256`, `bip32`, `zeroize`, `sha2`, `pbkdf2`, `unicode-normalization`,
-`blake2b_simd`, `getrandom`, `num-bigint`, `num-traits`, `ml-dsa`, `qp-poseidon-core`, `curve25519-dalek`, `argon2`, `chacha20`, `crc32fast`. **None of them can open a socket.** You can
+`blake2b_simd`, `getrandom`, `num-bigint`, `num-traits`, `ml-dsa`, `qp-poseidon-core`, `curve25519-dalek`, `argon2`, `chacha20`, `crc32fast`, `blake3`. **None of them can open a socket.** You can
 confirm the no-network claim by reading `Cargo.toml`, without reading a line of code.
 
 Private keys and seeds are zeroed on drop. Both crates are `#![forbid(unsafe_code)]`.
@@ -113,22 +114,22 @@ The miner's value is its optimized kernels. This tool's value is that you can re
 Key generation is the one thing a user should never run closed-source: a backdoored entropy source
 is undetectable from the outside and would steal every coin ever mined to the resulting address.
 Nothing here is proprietary — BIP32/39/44, secp256k1, Ed25519, bech32/bech32m, base58check
-(with Groestlcoin's Groestl-512 checksum), CashAddr and EIP-55 are public standards, and the Parano1d, Nockchain, Xelis, Tari and Zano address schemes are
+(with Groestlcoin's Groestl-512 checksum), CashAddr and EIP-55 are public standards, and the Parano1d, Nockchain, Xelis, Neural Engine Byte, Tari and Zano address schemes are
 open-source reference code — so publishing costs nothing and buys a claim that can actually be verified.
 
 ## Supported coins
 
-67 coins across eighteen address families: Taproot (bech32m), SegWit v0 (bech32), P2PKH
+68 coins across nineteen address families: Taproot (bech32m), SegWit v0 (bech32), P2PKH
 (base58check), Ethereum (EIP-55), CryptoNote/Monero, Kaspa-family (CashAddr), Ergo, Alephium, XDAG,
 Warthog, Epic Cash epicbox, Conflux Core Space (CIP-37), Parano1d, Quantus (SS58), Nockchain
-(base58 of a Tip5 digest), Xelis (bech32 `xel:`), Tari (base58 dual address) and Zano (`Zx…`). Two curves, secp256k1 and Ed25519, carry all
+(base58 of a Tip5 digest), Xelis (bech32 `xel:`), Neural Engine Byte (bech32m `neb1…`), Tari (base58 dual address) and Zano (`Zx…`). Two curves, secp256k1 and Ed25519, carry all
 of them but Parano1d, whose address is a Poseidon2b hash of the secret itself, Quantus, whose
 address hashes an ML-DSA-87 public key, Nockchain, whose key lives on the Cheetah curve over a
 degree-6 extension of the Goldilocks field, and Xelis and Tari, whose keys are Ristretto255 points. For `noid`
 the printed secret is the wallet master secret the official Parano1d wallet imports. For `quan` it
 is the 32-byte ML-DSA-87 seed. For `nock` it is a 24-word BIP39 mnemonic, restored with `restore
 --mnemonic`. For `xel` it is the 64-hex private key the official Xelis wallet restores with
-`recover_private_key`. For `xtm` it is a 24-word Tari CipherSeed (not BIP39), restored with
+`recover_private_key`. For `neb` it is the 64-hex Ed25519 seed the official `neb-wallet` imports. For `xtm` it is a 24-word Tari CipherSeed (not BIP39), restored with
 `restore --mnemonic`. For `zano` it is the 26-word Zano seed phrase the official wallet restores
 from, restored here with `restore --mnemonic`.
 

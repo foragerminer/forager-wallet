@@ -39,6 +39,10 @@
 /// CRC-32 checks it. `argon2` takes only `alloc`, `chacha20` only `cipher`, and `crc32fast` no `std`.
 /// All three are pure computation and generation-side only.
 ///
+/// `blake3` (CC0-1.0 OR Apache-2.0) is the lock hash of a Neural Engine Byte address. It is declared
+/// with no default features and the `pure` feature, so it brings no threading, no `std`, and no C
+/// or assembly. It is pure computation and generation-side only.
+///
 /// `pbkdf2` was already in the tree transitively via `bip32`, at the same version and feature
 /// selection, so declaring it directly added no crate. `unicode-normalization` is genuinely new:
 /// it is a pure-Rust Unicode data table with no I/O, and hand-rolling NFKD would be strictly worse
@@ -66,6 +70,7 @@ const ALLOWED: &[&str] = &[
     "argon2",
     "chacha20",
     "crc32fast",
+    "blake3",
 ];
 
 /// Parse the crate's own `[dependencies]` section into a list of dependency names.

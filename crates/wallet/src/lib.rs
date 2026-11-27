@@ -240,6 +240,12 @@ pub fn address_from_secret_kind(
             families::noid::parse_master_secret(secret_hex).ok_or(WalletError::BadPrivKeyHex)?;
         return Ok(noid_wallet(&spec, &master));
     }
+    // A NEB seed is any 32 bytes: an RFC 8032 Ed25519 seed has no range, and the official wallet
+    // applies no check, so none applies here either.
+    if spec.family() == Family::Neb {
+        let seed = families::neb::parse_seed(secret_hex).ok_or(WalletError::BadPrivKeyHex)?;
+        return Ok(neb_wallet(&spec, &seed));
+    }
     // A Nockchain master secret key is a scalar of its own curve, range-checked against that
     // curve's order and not secp256k1's.
     if spec.family() == Family::Nock {
@@ -305,6 +311,15 @@ pub fn generate(coin: &str, net: Network) -> Result<Wallet, WalletError> {
         getrandom::fill(&mut master).map_err(|_| WalletError::Entropy)?;
         let w = noid_wallet(&spec, &master);
         zeroize::Zeroize::zeroize(&mut master);
+        return Ok(w);
+    }
+    if spec.family() == Family::Neb {
+        // 32 uniform bytes, as the official wallet draws a seed. No rejection sampling: every
+        // Ed25519 seed is valid.
+        let mut seed = [0u8; 32];
+        getrandom::fill(&mut seed).map_err(|_| WalletError::Entropy)?;
+        let w = neb_wallet(&spec, &seed);
+        zeroize::Zeroize::zeroize(&mut seed);
         return Ok(w);
     }
     if spec.family() == Family::Nock {
@@ -423,6 +438,18 @@ fn noid_wallet(spec: &coins::CoinSpec, master: &[u8; 32]) -> Wallet {
         privkey: *master,
         secret_hex: hexbytes::encode(master),
         secret_std: SecretStd::RawHex(hexbytes::encode(master)),
+    }
+}
+
+/// Assemble the [`Wallet`] for a NEB seed: the 32-byte Ed25519 seed as the 64 lowercase hex
+/// characters the official wallet imports. NEB addresses are network-agnostic, so there is no `net`.
+fn neb_wallet(spec: &coins::CoinSpec, seed: &[u8; 32]) -> Wallet {
+    Wallet {
+        coin: spec.ticker,
+        address: families::neb::address(seed),
+        privkey: *seed,
+        secret_hex: hexbytes::encode(seed),
+        secret_std: SecretStd::RawHex(hexbytes::encode(seed)),
     }
 }
 
@@ -629,6 +656,9 @@ pub(crate) fn dispatch(
         // `noid_wallet`) so that a master secret outside the secp256k1 range still derives; this
         // arm keeps `dispatch` total and agrees with them byte for byte.
         coins::FamilyParams::Noid => families::noid::address(priv32),
+        // NEB likewise: the input bytes are the Ed25519 seed, `d` is unused, and the public entry
+        // points route around this arm (see `neb_wallet`). It agrees with them byte for byte.
+        coins::FamilyParams::Neb => families::neb::address(priv32),
         // Quantus likewise: the input bytes are the ML-DSA-87 seed, and `d` is unused.
         coins::FamilyParams::Quantus => families::quantus::address(priv32),
         // Nockchain: the input bytes are the master secret key, range-checked against the Cheetah
@@ -1039,6 +1069,7 @@ mod tests {
             ("noid:", "noid"),
             ("quantus:", "quan"),
             ("xelis:", "xel"),
+            ("neb:", "neb"),
             ("groestlcoin:", "grs"),
         ] {
             let t = address_from_secret(token, PRIV1, Network::Mainnet).unwrap();
@@ -1664,6 +1695,60 @@ mod tests {
         let (addr, _, canon) = dispatch(&spec, &d, &priv32, Network::Mainnet, false).unwrap();
         assert_eq!(addr, ADDR);
         assert_eq!(canon, priv32);
+    }
+
+    /// NEB through the public seam: RFC 8032 test 1 as the seed, the address the official
+    /// `neb-wallet` v1.0.9 prints for it. The all-zero and all-0xff seeds are valid and outside the
+    /// secp256k1 range, so they pin the routing around that check.
+    #[test]
+    fn neb_seed_through_the_public_seam() {
+        const SEED: &str = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60";
+        const ADDR: &str = "neb1dscsgyng73ckp8re7hedhnpcujj2kt6dg9ssnf8qnl84plg0qp3qltgsvu";
+        let w = address_from_secret("neb", SEED, Network::Mainnet).unwrap();
+        assert_eq!(w.address, ADDR);
+        assert_eq!(w.coin, "neb");
+        assert_eq!(w.secret_hex, SEED);
+        match &w.secret_std {
+            SecretStd::RawHex(s) => assert_eq!(s, SEED),
+            _ => panic!("expected SecretStd::RawHex"),
+        }
+        // Network-agnostic.
+        let t = address_from_secret("neb", SEED, Network::Testnet).unwrap();
+        assert_eq!(t.address, ADDR);
+        assert_eq!(
+            address_from_secret("neb", &"0".repeat(64), Network::Mainnet)
+                .unwrap()
+                .address,
+            "neb128cnvkkajp7rmjh2mrawjr872kgzvwpysdmmfhgak5qmz92543rqcacfxq"
+        );
+        assert_eq!(
+            address_from_secret("neb", &"f".repeat(64), Network::Mainnet)
+                .unwrap()
+                .address,
+            "neb1sraf6hdwkxsr6z9juqmx3zzkfl5gzzypguyl3kwqt59eq6fc4e3sypfqm9"
+        );
+        assert_eq!(
+            address_from_secret("neb", &"0".repeat(63), Network::Mainnet).err(),
+            Some(WalletError::BadPrivKeyHex)
+        );
+        // `dispatch`'s arm agrees with the routed path.
+        let priv32 = hex32(SEED);
+        let d = curves::secp256k1::scalar_in_range(&priv32).unwrap();
+        let spec = *coins::lookup("neb").unwrap();
+        let (addr, _, canon) = dispatch(&spec, &d, &priv32, Network::Mainnet, false).unwrap();
+        assert_eq!(addr, ADDR);
+        assert_eq!(canon, priv32);
+    }
+
+    #[test]
+    fn neb_generate_round_trips() {
+        let w = generate("neb", Network::Mainnet).unwrap();
+        assert!(w.address.starts_with("neb1"), "{}", w.address);
+        assert_eq!(w.address.len(), 62);
+        assert_eq!(w.secret_hex.len(), 64);
+        let again = address_from_secret("neb", &w.secret_hex, Network::Mainnet).unwrap();
+        assert_eq!(again.address, w.address);
+        assert_eq!(detect_family(&w.address), Some(Family::Neb));
     }
 
     /// The all-zero master secret is a valid Parano1d wallet (the official import takes any 64 hex

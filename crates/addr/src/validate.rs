@@ -27,9 +27,9 @@ use sha2::{Digest, Sha256};
 use crate::codec::{base58, bech32, cashaddr, conflux, cryptonote, nock, tari};
 use crate::coins::{
     Family, FamilyParams, COINS, EPICBOX_VERSION, GROESTLCOIN_HRP, GROESTLCOIN_P2PKH_VERSION,
-    GROESTLCOIN_P2PKH_VERSION_TESTNET, NOID_ADDRESS_LEN, NOID_HRP, QUANTUS_SS58_PREFIX,
-    TARI_NETWORK_MAINNET, XELIS_HRP, XELIS_HRP_TESTNET, XELIS_SEPARATOR, ZANO_ADDRESS_PREFIX,
-    ZANO_AUDITABLE_ADDRESS_PREFIX,
+    GROESTLCOIN_P2PKH_VERSION_TESTNET, NEB_ADDRESS_LEN, NEB_HRP, NOID_ADDRESS_LEN, NOID_HRP,
+    QUANTUS_SS58_PREFIX, TARI_NETWORK_MAINNET, XELIS_HRP, XELIS_HRP_TESTNET, XELIS_SEPARATOR,
+    ZANO_ADDRESS_PREFIX, ZANO_AUDITABLE_ADDRESS_PREFIX,
 };
 
 /// Characters in a Warthog address: 24 bytes (`hash160(20) ‖ checksum(4)`), two nibbles each.
@@ -165,6 +165,19 @@ pub fn detect_family(addr: &str) -> Option<Family> {
             && payload.len() == NOID_ADDRESS_LEN
         {
             return Some(Family::Noid);
+        }
+    }
+
+    // 2c'. Neural Engine Byte (NEB): `bech32m("neb", lock)` with a 32-byte payload and **no**
+    //     witness version. Source: `SilasEigen/neb@v1.0.9`
+    //     `node/crates/neb-wallet/src/address.rs`. The derivation side is `forager-wallet`'s
+    //     `families/neb.rs`. HRP, the bech32m constant and the payload length are all checked, so
+    //     the bech32 (non-m) spelling of the same bytes is not claimed. The HRP also keeps this arm
+    //     off every SegWit and other bech32m address.
+    if let Some((hrp, variant, payload)) = bech32::decode(a) {
+        if hrp == NEB_HRP && variant == bech32::Variant::Bech32m && payload.len() == NEB_ADDRESS_LEN
+        {
+            return Some(Family::Neb);
         }
     }
 
@@ -388,6 +401,7 @@ pub fn family_name(f: Family) -> &'static str {
         Family::Quantus => "Quantus (SS58 189, qz)",
         Family::Nock => "Nockchain (base58 payee hash, no checksum)",
         Family::Xelis => "Xelis (bech32 xel:)",
+        Family::Neb => "Neural Engine Byte (bech32m neb1)",
         Family::Zano => "Zano (Zx / aZx)",
         Family::Tari => "Tari (base58 dual address)",
     }
@@ -2098,6 +2112,97 @@ mod tests {
                 expected: Family::KaspaAddr
             }
         ));
+    }
+
+    /// NEB addresses captured from the official `neb-wallet` v1.0.9 (seeds 0, 1, RFC 8032 test 1,
+    /// RFC 8032 test 2, all-0xff). The derivation side is `forager-wallet`'s `families/neb.rs`.
+    const NEB_VECTORS: [&str; 5] = [
+        "neb128cnvkkajp7rmjh2mrawjr872kgzvwpysdmmfhgak5qmz92543rqcacfxq",
+        "neb1g3rypcwrwt03u08kc2cup882mmtajz6tplecreyqtnytf68fdcys8lt0jw",
+        "neb1dscsgyng73ckp8re7hedhnpcujj2kt6dg9ssnf8qnl84plg0qp3qltgsvu",
+        "neb1zqn7qddjdds9m3k5k7xs0hpfvc8ucdyckkv29etufe43kee6r62su4aap5",
+        "neb1sraf6hdwkxsr6z9juqmx3zzkfl5gzzypguyl3kwqt59eq6fc4e3sypfqm9",
+    ];
+
+    #[test]
+    fn detects_neb() {
+        for a in NEB_VECTORS {
+            assert_eq!(a.len(), 62);
+            assert_eq!(detect_family(a), Some(Family::Neb), "{a}");
+            assert_eq!(check(a, Family::Neb), Verdict::Ok, "{a}");
+            assert_eq!(
+                detect_family(&a.to_ascii_uppercase()),
+                Some(Family::Neb),
+                "{a}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_malformed_neb_address_is_not_confidently_classified() {
+        let a = NEB_VECTORS[2];
+        let (_, _, payload) = bech32::decode(a).unwrap();
+        assert_eq!(payload.len(), NEB_ADDRESS_LEN);
+
+        // Mixed case.
+        let mut mixed = a.to_string();
+        mixed.replace_range(5..6, "S");
+        assert_eq!(detect_family(&mixed), None);
+
+        // One character changed: the checksum fails.
+        let mut corrupted = a.to_string();
+        corrupted.replace_range(61..62, "p");
+        assert_ne!(detect_family(&corrupted), Some(Family::Neb));
+
+        // The same 32 bytes under the bech32 (non-m) checksum.
+        let non_m = bech32::encode_bech32_bytes_with_separator(NEB_HRP, '1', &payload);
+        assert_eq!(
+            bech32::verify(&non_m).map(|v| v.1),
+            Some(bech32::Variant::Bech32)
+        );
+        assert_ne!(detect_family(&non_m), Some(Family::Neb));
+
+        // The right payload under another HRP.
+        let wrong_hrp = bech32::encode_bech32m_bytes("nec", &payload);
+        assert!(bech32::verify(&wrong_hrp).is_some());
+        assert_ne!(detect_family(&wrong_hrp), Some(Family::Neb));
+
+        // One byte short and one byte long.
+        for len in [NEB_ADDRESS_LEN - 1, NEB_ADDRESS_LEN + 1] {
+            let mut p = payload.clone();
+            p.resize(len, 0);
+            let s = bech32::encode_bech32m_bytes(NEB_HRP, &p);
+            assert_ne!(detect_family(&s), Some(Family::Neb), "{len} bytes: {s}");
+        }
+
+        // A witness version in front of the same 32 bytes.
+        let segwit_shaped = bech32::encode(NEB_HRP, 1, &payload);
+        assert_ne!(detect_family(&segwit_shaped), Some(Family::Neb));
+    }
+
+    /// A NEB address is a hash of a public key under its own HRP, so other families neither claim
+    /// it nor are claimed by it.
+    #[test]
+    fn neb_is_compatible_only_with_itself() {
+        assert!(matches!(
+            check(NEB_VECTORS[0], Family::Taproot),
+            Verdict::Mismatch {
+                detected: Family::Neb,
+                expected: Family::Taproot
+            }
+        ));
+        for other in [
+            "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
+            "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+            NOID_FUND,
+            XELIS_VECTORS[0].1,
+        ] {
+            assert_ne!(detect_family(other), Some(Family::Neb), "{other}");
+            assert!(
+                matches!(check(other, Family::Neb), Verdict::Mismatch { .. }),
+                "{other}"
+            );
+        }
     }
 
     /// The two official vectors of `forager-wallet`'s `families/tari.rs`, each as

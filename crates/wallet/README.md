@@ -35,7 +35,7 @@ known-answer test. The exceptions are Parano1d (`noid`) and Nockchain (`nock`): 
 standard to re-derive from, so their constants are copied from the projects' reference code (see
 [`NOTICE`](NOTICE)). Parano1d's known-answer vectors were captured from that node's own key store;
 Nockchain's are the reference's own Hoon test vectors plus mnemonic-to-address vectors captured
-from the official `nockchain-wallet`. Xelis (`xel`), Tari (`xtm`) and Zano (`zano`) also follow
+from the official `nockchain-wallet`. Xelis (`xel`), Neural Engine Byte (`neb`), Tari (`xtm`) and Zano (`zano`) also follow
 their reference code rather than a standard; their vectors were produced by running that code. That proves the *scheme* is right. It does not prove *your* address is right. Only an independent
 re-derivation does that.
 
@@ -50,6 +50,8 @@ re-derivation does that.
      address has **no checksum**: a mistyped one is still valid, and its funds are lost;
    - `xel`: the official Xelis wallet, by `recover_private_key` with the 64-hex key. Its address
      must match;
+   - `neb`: the official `neb-wallet`, by `neb-wallet --wallet wallet.txt import <64-hex>`, then
+     `neb-wallet --wallet wallet.txt address`. The address must match;
    - `xtm`: a Tari wallet, by restoring from the same 24 seed words (a Tari CipherSeed, not
      BIP39). It may show the default `14…` form of the address; the one-sided `12…` form printed
      here has the same keys;
@@ -71,7 +73,7 @@ The known-answer vectors are in this crate's tests, so you can check the scheme 
 
 The crate depends on `k256`, `bip32`, `zeroize`, `sha2`, `pbkdf2`, `unicode-normalization`,
 `blake2b_simd`, `getrandom`, `num-bigint`, `num-traits`, `ml-dsa`, `qp-poseidon-core`,
-`curve25519-dalek`, `argon2`, `chacha20`, `crc32fast` and `forager-addr`. **None of them can open
+`curve25519-dalek`, `argon2`, `chacha20`, `crc32fast`, `blake3` and `forager-addr`. **None of them can open
 a socket.** You can confirm the no-network claim by reading `Cargo.toml`, without reading any code.
 
 BIP-39 (mnemonic ↔ entropy, and phrase → seed) is implemented in this crate rather than delegated,

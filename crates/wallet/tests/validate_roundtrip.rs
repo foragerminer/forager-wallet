@@ -476,6 +476,49 @@ fn every_generated_quantus_address_round_trips_through_detection() {
     }
 }
 
+/// Every NEB address the generator emits round-trips through detection, and no single-character
+/// corruption of one is still detected as NEB. The first seed is RFC 8032 test 1, whose address the
+/// official `neb-wallet` v1.0.9 prints (`families/neb.rs`, `VECTORS`).
+#[test]
+fn every_generated_neb_address_round_trips_through_detection() {
+    let w = forager_wallet::address_from_secret(
+        "neb",
+        "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
+        Network::Mainnet,
+    )
+    .unwrap();
+    assert_eq!(
+        w.address,
+        "neb1dscsgyng73ckp8re7hedhnpcujj2kt6dg9ssnf8qnl84plg0qp3qltgsvu"
+    );
+    assert_eq!(detect_family(&w.address), Some(Family::Neb));
+
+    for i in 0u32..4 {
+        let secret = format!("{i:064x}");
+        let w = forager_wallet::address_from_secret("neb", &secret, Network::Mainnet).unwrap();
+        assert_eq!(w.address.len(), 62, "key {secret}: {}", w.address);
+        assert_eq!(
+            detect_family(&w.address),
+            Some(Family::Neb),
+            "{}",
+            w.address
+        );
+        assert_eq!(check(&w.address, Family::Neb), Verdict::Ok, "{}", w.address);
+
+        for pos in 0..w.address.len() {
+            let mut bad = w.address.clone().into_bytes();
+            bad[pos] = if bad[pos] == b'q' { b'p' } else { b'q' };
+            let bad = String::from_utf8(bad).unwrap();
+            assert_ne!(
+                detect_family(&bad),
+                Some(Family::Neb),
+                "corruption at {pos} of {} still detected",
+                w.address
+            );
+        }
+    }
+}
+
 /// Every Xelis address the generator emits round-trips through detection on both networks, and no
 /// single-character corruption of one does. The first key is the scalar 1 (little-endian), whose
 /// address `xelis-project/xelis-blockchain@db59b5c2` itself produces.
